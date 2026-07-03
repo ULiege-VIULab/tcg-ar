@@ -1,0 +1,10 @@
+C:/Program Files/MediaMTX/mediamtx.exe
+# ^^^ The FIRST line above must be the absolute path to your MediaMTX executable,
+#     which the app launches to publish the RTSP output streams.
+#
+# Setup:
+#   1. Download MediaMTX:  https://github.com/bluenviron/mediamtx/releases
+#   2. Copy this file to `settings.yaml` (it is git-ignored).
+#   3. Replace the path on the first line with the path on your machine.
+#
+# Only the first line is read; everything else here is a comment.

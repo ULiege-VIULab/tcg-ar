@@ -1,0 +1,12 @@
+# Normalise line endings for text sources.
+*.py   text eol=lf
+*.md   text eol=lf
+*.txt  text
+*.yaml text eol=lf
+*.cff  text eol=lf
+
+# The large binary artifacts (model weights, real-set images, background) are NOT
+# committed -- they are git-ignored and fetched with scripts/download_assets.py.
+# If you prefer to commit them instead, enable Git LFS and uncomment:
+# *.pth filter=lfs diff=lfs merge=lfs -text
+# *.png filter=lfs diff=lfs merge=lfs -text

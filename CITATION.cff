@@ -1,0 +1,44 @@
+cff-version: 1.2.0
+message: "If you use this software or data, please cite the following paper."
+title: "TCG-AR: Real-Time Multi-View Augmented Reality for Trading Card Game Streaming"
+authors:
+  - family-names: Cioppa
+    given-names: Anthony
+    orcid: "https://orcid.org/0000-0002-5314-9015"
+    affiliation: "University of Liège"
+  - family-names: Verdonck
+    given-names: Antoine
+    orcid: "https://orcid.org/0009-0006-0590-2275"
+    affiliation: "University of Liège"
+  - family-names: Henry
+    given-names: Maxim
+    orcid: "https://orcid.org/0009-0007-8899-8723"
+    affiliation: "University of Liège"
+  - family-names: Van Droogenbroeck
+    given-names: Marc
+    orcid: "https://orcid.org/0000-0001-6260-6487"
+    affiliation: "University of Liège"
+  - family-names: La Rocca
+    given-names: Raphaël
+    orcid: "https://orcid.org/0000-0003-3388-3041"
+    affiliation: "University of Liège"
+license: GPL-3.0-or-later
+type: software
+repository-code: "https://github.com/ULiege-VIULab/tcg-ar"
+preferred-citation:
+  type: generic
+  title: "TCG-AR: Real-Time Multi-View Augmented Reality for Trading Card Game Streaming"
+  authors:
+    - family-names: Cioppa
+      given-names: Anthony
+    - family-names: Verdonck
+      given-names: Antoine
+    - family-names: Henry
+      given-names: Maxim
+    - family-names: Van Droogenbroeck
+      given-names: Marc
+    - family-names: La Rocca
+      given-names: Raphaël
+  repository-code: "https://github.com/ULiege-VIULab/tcg-ar"
+  url: "https://arxiv.org/abs/2607.02090"
+  year: 2026

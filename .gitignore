@@ -1,0 +1,72 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# --- IDE / OS ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# --- Runtime / local config / outputs ---
+work_dirs/
+*.log
+settings.yaml          # machine-specific; copy settings.example.yaml -> settings.yaml
+tests/*.png
+
+# MediaMTX runtime artifacts (downloaded/generated automatically on first run)
+mediamtx/
+mediamtx.zip
+auto.crt
+auto.key
+
+# =====================================================================
+# Large / downloadable assets.
+# These are NOT committed: fetch them with scripts/download_assets.py
+# (pre-built models, real eval set, background) or build them with
+# `python -m installation.install ...` (card images, sprites, JSONs,
+# synthetic datasets). The folders/.gitkeep and the small non-creatable
+# files below ARE kept.
+# =====================================================================
+
+# Model weights (download)
+*.pth
+
+# Real evaluation set: ship the (tiny) manual annotations, download the images
+assets/AI database/real/images/
+assets/AI database/real/orientation/
+
+# Background textures (separate download link)
+assets/AI database/background/*
+!assets/AI database/background/.gitkeep
+
+# Generated synthetic datasets
+assets/AI database/detection/*
+!assets/AI database/detection/.gitkeep
+assets/AI database/orientation/*
+!assets/AI database/orientation/.gitkeep
+assets/AI database/identification/*
+!assets/AI database/identification/.gitkeep
+
+# Downloaded card images (keep only the card back), sprites, and built JSONs
+assets/database/card_database/*
+!assets/database/card_database/back1-1.jpg
+assets/database/2D_animated_database/*
+!assets/database/2D_animated_database/.gitkeep
+assets/database/2D_database/*
+!assets/database/2D_database/.gitkeep
+assets/database/*.json
+!assets/database/wrong_scan_cards.json
+
+# Active deck file (runtime state written by the GUI — not a committed example)
+assets/deck list/deck.txt
+
+# Pre-computed embedding cache (large, auto-regenerated — never commit)
+assets/embedding_cache/
+
+# Zip archives that may end up in the assets tree (e.g. downloaded real eval set)
+assets/**/*.zip
