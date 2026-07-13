@@ -1,6 +1,11 @@
-# TCG-AR: Real-Time Multi-View Augmented Reality for Trading Card Game Streaming
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/figures/tcg-ar_logo_dark.png">
+    <img src="docs/figures/tcg-ar_logo_light.png" width="680" alt="TCG-AR: Real-Time Multi-View Augmented Reality for Trading Card Game Streaming">
+  </picture>
+</p>
 
-**2026** &nbsp;|&nbsp; [Paper](https://arxiv.org/abs/2607.02090) &nbsp;|&nbsp; [Game demo ▶](https://youtu.be/Gn59g8xKbtk) &nbsp;|&nbsp; [Interface demo ▶](https://youtu.be/s2vnQ3FTKEw)
+<p align="center"><b>2026</b> &nbsp;|&nbsp; <a href="https://arxiv.org/abs/2607.02090">Paper</a> &nbsp;|&nbsp; <a href="https://youtu.be/Gn59g8xKbtk">Game demo ▶</a> &nbsp;|&nbsp; <a href="https://youtu.be/s2vnQ3FTKEw">Interface demo ▶</a></p>
 
 <img src="docs/figures/teaser.png" width="900">
 

@@ -68,7 +68,7 @@ class Main_window(QtWidgets.QMainWindow):
     def __init__(self, screen_size):
         super().__init__()
         self.setWindowTitle("Ptcg AR")
-        self.setWindowIcon(QtGui.QIcon(_icon("Pokeball")))
+        self.setWindowIcon(QtGui.QIcon(_icon("AppIcon")))
         self.resize(screen_size.width() / 2, screen_size.height() / 2)
         deck_list = Deck_list_creator(self, None)
         self.setCentralWidget(deck_list)
@@ -182,7 +182,7 @@ class Main_window(QtWidgets.QMainWindow):
         screen_size = self.screen().size()
         self.secondary_window = QtWidgets.QMainWindow()
         self.secondary_window.setWindowTitle("Ptcg AR")
-        self.secondary_window.setWindowIcon(QtGui.QIcon(_icon("Pokeball")))
+        self.secondary_window.setWindowIcon(QtGui.QIcon(_icon("AppIcon")))
         self.secondary_window.resize(screen_size.width() / 2, screen_size.height() / 2)
 
         deck_widget = Deck_list_creator(self.secondary_window, self.centralWidget())
@@ -3525,7 +3525,7 @@ if __name__ == "__main__":
     select_zenith_camera_widget = Select_zenith_camera_widget(mainwindow, "Select the game board camera.", detected_camera, shared_frame_buffers, buffer_locks, input_processes)
 
     mainwindow.setWindowTitle("Ptcg AR")
-    mainwindow.setWindowIcon(QtGui.QIcon(_icon("Pokeball")))
+    mainwindow.setWindowIcon(QtGui.QIcon(_icon("AppIcon")))
     mainwindow.resize(screen_size.width() / 2, screen_size.height() / 2)
     mainwindow.setCentralWidget(select_zenith_camera_widget)
     mainwindow.show()

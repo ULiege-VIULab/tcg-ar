@@ -120,5 +120,5 @@ OV/EV certificate also builds SmartScreen reputation over time.
 | `bootstrap.ps1` | Post-install provisioning (Python, venv, deps, assets); also the repair tool |
 | `update_carddb.ps1` | New-set card-DB refresh, launched from its Start-Menu shortcut |
 | `build.ps1` | Maintainer build: stage snapshot, vendor uv, compile with ISCC |
-| `assets/tcg-ar.ico` | App/installer icon (generated from the in-app pokeball drawing) |
+| `assets/tcg-ar.ico` | App/installer icon (the TCG-AR brand mark, multi-size) |
 | `stage/`, `vendor/`, `dist/` | Build artifacts (git-ignored) |

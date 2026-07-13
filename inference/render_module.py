@@ -715,8 +715,8 @@ class Multi_frame_renderer:
             flip_sprite = board_x < WIDTH / 2
 
             for j in range(len(files)):
-                # Non-Pokemon cards (Trainer/Energy) have no model: do NOT draw the
-                # pokeball placeholder on the AR frame. The card still appears in the
+                # Non-Pokemon cards (Trainer/Energy) have no model: draw nothing
+                # on the AR frame. The card still appears in the
                 # GUI side panel (Card_menu lists every detected card).
                 if files[j] == NO_POKEMON_PATH:
                     continue

@@ -38,16 +38,6 @@ def _centered(draw, text, font, fill, cx=S // 2, cy=S // 2):
     draw.text((cx - (r - l) / 2 - l, cy - (b - t) / 2 - t), text, font=font, fill=fill)
 
 
-def pokeball():
-    img, d = _canvas()
-    m = 8
-    d.ellipse([m, m, S - m, S - m], fill=WHITE, outline=INK, width=7)
-    d.pieslice([m, m, S - m, S - m], 180, 360, fill=(230, 60, 55, 255), outline=INK, width=7)
-    d.rectangle([m, S // 2 - 7, S - m, S // 2 + 7], fill=INK)
-    d.ellipse([S // 2 - 20, S // 2 - 20, S // 2 + 20, S // 2 + 20], fill=WHITE, outline=INK, width=7)
-    return img
-
-
 def gear():
     img, d = _canvas()
     import math
@@ -130,8 +120,10 @@ def energy_icon(type_name, color):
     return img
 
 
+# Note: the application icon (AppIcon.png, the TCG-AR brand mark) is a
+# committed asset in this folder, NOT generated here - do not overwrite it.
 ICONS = {
-    "Pokeball": pokeball, "Parameter": gear, "Exit": exit_icon, "Help": help_icon,
+    "Parameter": gear, "Exit": exit_icon, "Help": help_icon,
     "EnableDisable": toggle_icon, "SidePanel": side_panel, "Deck": deck, "Broadcast": broadcast,
 }
 
