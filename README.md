@@ -34,6 +34,7 @@ chips, or instrumented surfaces.
 - [Datasets](#datasets)
 - [Results](#results)
 - [Application](#application)
+- [Easy installation (Windows installer)](#easy-installation-windows-installer)
 - [Repository layout](#repository-layout)
 - [1. Installation (Windows)](#1-installation-windows)
 - [2. Get the models and data](#2-get-the-models-and-data)
@@ -121,6 +122,52 @@ attack information for spectators.
 
 ---
 
+## Easy installation (Windows installer)
+
+**No Python, no conda, no command line.** If you just want to *use* TCG-AR,
+download **`TCG-AR-Setup-<version>.exe`** from the
+[Releases page](https://github.com/ULiege-VIULab/tcg-ar/releases) and
+double-click it. (If Windows SmartScreen shows "Windows protected your PC",
+click *More info* → *Run anyway* — the installer is not code-signed.)
+
+**What you need:** Windows 10/11, an NVIDIA GPU (RTX 20-series or newer), an
+internet connection, and a free Pokémon TCG API key — sign up at
+<https://dev.pokemontcg.io> and copy the key; the installer asks for it.
+
+**What the installer does, entirely inside its own window:**
+1. Detects your GPU generation and picks the matching software stack
+   automatically (you can override it).
+2. Lets you choose the components: AI models (required), the card database
+   (~20,000 cards, several GB — this is where the API key is used), and the
+   pre-computed embeddings (recommended).
+3. Copies the app, then downloads and configures everything with progress
+   bars and a live log — no console windows. The big download is 3–8 GB;
+   the card database can take 1–3 hours. If anything fails (e.g. a network
+   hiccup), the error is shown right in the installer with a **Retry**
+   button, and every step resumes where it stopped.
+
+**After installation** you get three Start Menu entries:
+- **TCG-AR** — launches the app (appears once setup completed successfully;
+  on first launch Windows Firewall asks once — click *Allow access*).
+- **TCG-AR – Update card database** — fetches new cards after set releases.
+- **TCG-AR Setup (repair)** — resumes/repairs an interrupted setup.
+
+**When new card sets release:** run the installer again and pick **"Update
+the card database"** on the first page (or use the Start Menu shortcut).
+Only the missing cards, sprites and embeddings are fetched — **no model
+retraining is ever needed** ([why](#c-update-the-card-database-with-new-cards-no-retraining)).
+
+**Updating TCG-AR itself:** download the newer setup exe and install over
+the old one — your card database, models and settings are preserved.
+
+**Uninstalling:** Windows Settings → Apps → TCG-AR (it asks whether to keep
+the downloaded data for a future reinstall).
+
+Everything below this point is for **developers** who want to set up the
+environment manually, retrain the models, or reproduce the paper.
+
+---
+
 ## Repository layout
 ```
 core/          # shared library: config, databases, transforms, models, training utils
@@ -138,6 +185,10 @@ Open **PowerShell** in the repository folder before running them.
 ---
 
 ## 1. Installation (Windows)
+
+> **Manual / developer setup.** End users should use the
+> [Windows installer](#easy-installation-windows-installer) instead — it
+> needs no command line and manages its own Python environment.
 
 Pick the option that matches your GPU. Both use conda
 ([Miniconda](https://docs.conda.io/en/latest/miniconda.html)).

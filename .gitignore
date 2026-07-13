@@ -18,6 +18,11 @@ work_dirs/
 settings.yaml          # machine-specific; copy settings.example.yaml -> settings.yaml
 tests/*.png
 
+# --- Windows installer build artifacts (see installer/README.md) ---
+installer/dist/
+installer/stage/
+installer/vendor/
+
 # MediaMTX runtime artifacts (downloaded/generated automatically on first run)
 mediamtx/
 mediamtx.zip
