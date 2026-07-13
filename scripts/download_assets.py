@@ -33,7 +33,7 @@ ASSETS = os.path.join(ROOT, "assets")
 MANIFEST = [
     ("models", "detection",
      "TCGAR_DETECTION_URL",
-     "1wXqI41Vx0BIfhLFDTUq32JN82rriKCys",
+     "1o1f1430boX6PMsRgfNhPvg8IOMfygTsJ",
      "AI models/Detection model/custom_oriented_rcnn_weight.pth",
      "file"),
     ("models", "orientation",

@@ -40,9 +40,12 @@ def download_sprites():
     db.create_2D_animated_database()
 
 
-def download_cards():
-    print("Downloading the card-image database...")
-    db.download_card_database()
+def download_cards(update=False):
+    if update:
+        print("Updating the card-image database (missing images only)...")
+    else:
+        print("Downloading the card-image database...")
+    db.download_card_database(update=update)
 
 
 def precompute_embeddings():
@@ -105,6 +108,8 @@ def main():
     parser.add_argument("--identification-dataset", action="store_true")
     parser.add_argument("--embeddings", action="store_true",
                         help="pre-compute and cache card embeddings (requires --cards + --metadata first)")
+    parser.add_argument("--update", action="store_true",
+                        help="with --cards: fetch only the missing card images instead of re-downloading all")
     args = parser.parse_args()
 
     print(f"Assets root: {ASSETS_ROOT}")
@@ -124,7 +129,7 @@ def main():
     if args.json_databases:
         db.create_card_databases(); did_something = True
     if args.cards:
-        download_cards(); did_something = True
+        download_cards(update=args.update); did_something = True
     if args.sprites:
         download_sprites(); did_something = True
     if args.detection_dataset or args.orientation_dataset or args.identification_dataset:

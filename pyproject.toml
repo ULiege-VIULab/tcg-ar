@@ -7,7 +7,7 @@ name = "ptcg-ar"
 version = "1.0.0"
 description = "Markerless augmented-reality pipeline for the Pokemon Trading Card Game"
 readme = "README.md"
-requires-python = ">=3.14"
+requires-python = ">=3.11"
 
 # NOTE: the heavy native dependencies (torch+cu118, mmcv-full, mmdet, mmrotate)
 # are NOT installable from PyPI in a portable way -- see README.md / requirements.txt

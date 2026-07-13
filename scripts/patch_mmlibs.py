@@ -8,6 +8,11 @@ import importlib.util
 import pathlib
 import sys
 
+# Our status messages contain non-ASCII arrows; never let a legacy console
+# code page (e.g. cp1252 when output is redirected) crash the patcher.
+sys.stdout.reconfigure(errors="replace")
+sys.stderr.reconfigure(errors="replace")
+
 # ── helpers ───────────────────────────────────────────────────────────────────
 
 def _pkg_root(name: str) -> pathlib.Path:
@@ -136,7 +141,10 @@ def main() -> None:
     )
 
     reg = mmrotate / 'registry.py'
-    for name in ('DATASETS', 'METRICS', 'TASK_UTILS', 'TRANSFORMS'):
+    # MODELS is essential: without it, building a detector fails with
+    # "DetDataPreprocessor is not in the mmrotate::model registry" because
+    # mmrotate's MODELS registry cannot see mmdet's registrations.
+    for name in ('DATASETS', 'METRICS', 'MODELS', 'TASK_UTILS', 'TRANSFORMS'):
         patch_file(
             reg,
             old=f"from mmengine.registry import {name} as MMENGINE_{name}",

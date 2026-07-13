@@ -11,7 +11,7 @@ PyYAML
 tqdm
 matplotlib
 requests
-numpy>=2.0
+numpy>=1.26,<3
 
 # --- The following are installed manually, NOT via this file (see README.md) ---
 # torch==2.12.1+cu132 / torchvision  (CUDA 13.2 wheels, RTX 5080 / Blackwell)
