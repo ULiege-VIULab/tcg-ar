@@ -109,7 +109,13 @@ SV_ANIMATED_SOURCE = os.environ.get("TCGAR_SV_SOURCE", "https://scaviogifs.tumbl
 # every frame in RAM, so they are re-encoded on download to a sane height and
 # frame budget (the total loop time is preserved).
 SV_MAX_HEIGHT = 256
-SV_MAX_FRAMES = 72
+SV_MAX_FRAMES = 40
+# The renderer downscales each SV frame to this height on load so that, after the
+# usual MODEL_ZOOM_DEFAULT_PERCENT zoom, SV sprites render at about the same
+# on-screen size as the old 2D-animated sprites (median native ~76 px). This
+# keeps sizes uniform and the per-frame alpha compositing cheap (SV would
+# otherwise render ~3x taller / ~11x the pixel area). Stored files stay 256 px.
+SV_RENDER_STORE_HEIGHT = 90
 
 # --------------------------------------------------------------------------- #
 # User interface / broadcast overlay

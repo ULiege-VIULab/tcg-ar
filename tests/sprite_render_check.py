@@ -43,7 +43,7 @@ class FakeGS:
     def get_card_location(self, i): return (self.cards[i][1], self.cards[i][2])
     def get_pokemon_card_id(self, i): return f"card{i}"
     def is_pokemon_card(self, i): return True
-    def get_pokemon_path(self, i, role="wait"): return [self.cards[i][0]]
+    def get_pokemon_path(self, i, role="wait", sv_enabled=False): return [self.cards[i][0]]
 
 
 def solid(color, h=100, w=100):

@@ -31,6 +31,13 @@ SV_ROLE_BATTLE = "battle"   # active Pokemon
 SV_ROLE_WAIT = "wait"       # benched Pokemon (default idle)
 SV_ROLE_IDLES = ("idle1", "idle2")   # occasional benched fidgets
 
+_SV_DIR_MARKER = os.sep + SV_ANIMATED_DATABASE_FOLDER + os.sep
+
+
+def _is_sv_path(path):
+    """True if a sprite path is an SV animated sprite (under SV_animated/)."""
+    return _SV_DIR_MARKER in path or path.startswith(SV_ANIMATED_MODEL_FOLDER)
+
 # Side (auxiliary) views render sprites smaller than the zenithal view: this factor is
 # applied to the stored (zenithal-sized) sprite, e.g. 150% / 200% = 0.75.
 SIDE_VIEW_ZOOM_RATIO = MODEL_ZOOM_SIDE_PERCENT / MODEL_ZOOM_DEFAULT_PERCENT
@@ -418,7 +425,7 @@ class Game_state:
                     return p
         return None
 
-    def get_pokemon_path(self, card_index, role=SV_ROLE_WAIT):
+    def get_pokemon_path(self, card_index, role=SV_ROLE_WAIT, sv_enabled=False):
         self.update_object()
         paths = []
 
@@ -440,7 +447,7 @@ class Game_state:
                 db_form = self.database[dex - 1]["Forms"][form_number]["Form"]
                 shiny = self.pokemon_list[card_index][self.SHINY_INDEX_1 + i]
                 female = self.pokemon_list[card_index][self.FEMALE_INDEX_1 + i]
-                if not shiny:
+                if sv_enabled and not shiny:
                     sv_path = self._sv_lookup(dex, db_form, form_number, female, role)
                     if sv_path:
                         paths.append(sv_path)
@@ -619,6 +626,9 @@ class Multi_frame_renderer:
         self._path_cache_key: dict = {}
         # Per-card SV animation role state (benched idle fidget scheduling).
         self._idle_state: dict = {}
+        # Scarlet/Violet sprites are opt-in (broadcast-panel toggle). Off by
+        # default -> the familiar, lighter gen1-8 animated / static sprites.
+        self.sv_enabled: bool = False
     
     def load_models(self, files_to_load):
         #remove entry from pokemon_dict that is not in files_to_load
@@ -656,6 +666,15 @@ class Multi_frame_renderer:
                     duration = meta.get("duration")
                     #transform into sec
                     duration /= 1000
+
+                    # SV sprites are stored large (256 px) for quality; downscale
+                    # them here so that, after the shared 200% zoom, they render at
+                    # the same on-screen size as the old sprites -- uniform size and
+                    # ~11x cheaper per-frame compositing.
+                    if _is_sv_path(file) and gif and gif[0].shape[0] > SV_RENDER_STORE_HEIGHT:
+                        sh = SV_RENDER_STORE_HEIGHT
+                        sw = max(1, int(round(gif[0].shape[1] * sh / gif[0].shape[0])))
+                        gif = [cv2.resize(f, (sw, sh), interpolation=cv2.INTER_AREA) for f in gif]
 
                     img = np.array([cv2.cvtColor(img, cv2.COLOR_RGBA2BGRA) for img in gif])
                 else:
@@ -739,11 +758,12 @@ class Multi_frame_renderer:
             self._idle_state[i] = st
         return st[0]
 
-    def _cached_pokemon_path(self, game_state, i, role=SV_ROLE_WAIT):
+    def _cached_pokemon_path(self, game_state, i, role=SV_ROLE_WAIT, sv_enabled=False):
         """Return sprite paths for card i, recomputing only when the card's fields
-        (or its SV animation role) change."""
+        (or its SV animation role / SV-enabled state) change."""
         pl = game_state.pokemon_list[i]
         key = (
+            sv_enabled,
             role,
             pl[Game_state.NUMBER_POKEMON_INDEX],
             pl[Game_state.POKEMON_POKEDEX_NUMBER_INDEX_1],
@@ -763,7 +783,7 @@ class Multi_frame_renderer:
             pl[Game_state.SHINY_INDEX_3],
         )
         if self._path_cache_key.get(i) != key:
-            self._path_cache[i] = game_state.get_pokemon_path(i, role=role)
+            self._path_cache[i] = game_state.get_pokemon_path(i, role=role, sv_enabled=sv_enabled)
             self._path_cache_key[i] = key
         return self._path_cache[i]
 
@@ -779,9 +799,15 @@ class Multi_frame_renderer:
 
         # Per-card SV animation role (battle for the active Pokemon, wait/idle for
         # benched). Computed once per frame and shared by the reload + draw loops.
-        _now = self.time[id_frame]
-        _active = active_card_indices(game_state)
-        roles = {i: self._card_role(i, i in _active, _now) for i in range(number_card)}
+        # Only meaningful when SV sprites are enabled; otherwise a constant role
+        # keeps the path cache stable.
+        sv = self.sv_enabled
+        if sv:
+            _now = self.time[id_frame]
+            _active = active_card_indices(game_state)
+            roles = {i: self._card_role(i, i in _active, _now) for i in range(number_card)}
+        else:
+            roles = {}
 
         for i in range(len(self.pokemon_models)):
             if self.num_frames_in_gif[i] != 1:
@@ -794,7 +820,7 @@ class Multi_frame_renderer:
         _all_sprite_paths = []
         _needs_reload = False
         for _ii in range(number_card):
-            for _f in self._cached_pokemon_path(game_state, _ii, roles.get(_ii, SV_ROLE_WAIT)):
+            for _f in self._cached_pokemon_path(game_state, _ii, roles.get(_ii, SV_ROLE_WAIT), sv):
                 if _f != NO_POKEMON_PATH:
                     _all_sprite_paths.append(_f)
                     if not isinstance(self.pokemon_dict.get(_f), int):
@@ -814,7 +840,7 @@ class Multi_frame_renderer:
         draw_order.sort(key = lambda item: item[0])
 
         for _projected_row, i, projected, board_x in draw_order:
-            files = self._cached_pokemon_path(game_state, i, roles.get(i, SV_ROLE_WAIT))
+            files = self._cached_pokemon_path(game_state, i, roles.get(i, SV_ROLE_WAIT), sv)
             pokemon_index = None
 
             # Sprites on the left half of the board are mirrored horizontally so the two

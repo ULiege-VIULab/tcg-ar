@@ -12,13 +12,17 @@ entry below.
 
 Higher-quality animated sprites.
 
-- **Scarlet/Violet animated sprites** (from the Scavio GIFs Tumblr) are now the
-  primary sprite source: high-quality idle + battle animations for the SV
-  roster (National Dex #0001–1025), downloaded and re-encoded (downscaled +
-  frame-capped) during the sprite build.
-- The **active Pokémon** (nearest the board centre on each side) now plays its
+- **Scarlet/Violet animated sprites** (from the Scavio GIFs Tumblr): high-quality
+  idle + battle animations for the SV roster (National Dex #0001–1025),
+  downloaded and re-encoded (downscaled + frame-capped) during the sprite build.
+- **Opt-in** via the **"Enable S&V animated sprites"** menu toggle (off by
+  default, so the default look and performance are unchanged). When on, they are
+  the primary sprite source.
+- The **active Pokémon** (nearest the board centre on each side) plays its
   **battle** animation; benched Pokémon play the **idle** animation with the
   occasional fidget.
+- SV sprites are downscaled on load to render at the same on-screen size as the
+  old sprites — uniform sizing and light per-frame compositing.
 - Automatic fallback per Pokémon: Scavio SV → the previous gen 1–8 animated
   sprites → the static 2D sprite (so shiny and uncovered Pokémon are unchanged).
 - Building the sprites (part of the card-database step) now also fetches the SV

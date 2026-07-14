@@ -134,6 +134,10 @@ class Main_window(QtWidgets.QMainWindow):
         self.act_addresses.setStatusTip("Show/hide the RTSP address under each view")
         self.act_addresses.triggered.connect(self.toggle_stream_addresses)
 
+        self.act_endis_sv = QtGui.QAction(QtGui.QIcon(_icon("Broadcast")), "Enable S&&V animated sprites", self)
+        self.act_endis_sv.setStatusTip("Use the high-quality Scarlet/Violet animated sprites (active Pokemon battles, benched idle) instead of the default sprites")
+        self.act_endis_sv.triggered.connect(self.enable_disable_sv_sprites)
+
         self.file_menu.insertAction(self.act_exit, self.act_endis_color)
         self.file_menu.insertSeparator(self.act_exit)
         self.file_menu.insertAction(self.act_exit, self.act_sh_panel)
@@ -145,6 +149,8 @@ class Main_window(QtWidgets.QMainWindow):
         self.file_menu.insertAction(self.act_exit, self.act_streams)
         self.file_menu.insertSeparator(self.act_exit)
         self.file_menu.insertAction(self.act_exit, self.act_addresses)
+        self.file_menu.insertSeparator(self.act_exit)
+        self.file_menu.insertAction(self.act_exit, self.act_endis_sv)
         self.file_menu.insertSeparator(self.act_exit)
 
     @QtCore.Slot()
@@ -168,6 +174,16 @@ class Main_window(QtWidgets.QMainWindow):
         else:
             self.act_endis_color.setText("Disable color correction")
         self.centralWidget().change_color_correction()
+
+    @QtCore.Slot()
+    def enable_disable_sv_sprites(self):
+        cw = self.centralWidget()
+        if not hasattr(cw, "change_sv_enabled"):
+            return   # only meaningful once the AR view is running
+        cw.change_sv_enabled()
+        self.act_endis_sv.setText(
+            "Disable S&&V animated sprites" if cw.get_sv_enabled()
+            else "Enable S&&V animated sprites")
 
     @QtCore.Slot()
     def show_hide_card_panel(self):
@@ -3412,6 +3428,14 @@ class Show_camera_widget(QtWidgets.QWidget):
 
     def change_color_correction(self):
         self.color_correction.value = not(self.color_correction.value)
+
+    def get_sv_enabled(self):
+        return bool(getattr(self.renderer, "sv_enabled", False))
+
+    def change_sv_enabled(self):
+        # SV sprites are resolved in this (GUI) process' renderer, so a plain
+        # attribute toggle is enough -- no cross-process Value needed.
+        self.renderer.sv_enabled = not self.get_sv_enabled()
 
     def get_card_panel_view(self):
         return self.card_panel_view

@@ -145,14 +145,26 @@ row[G.FORM_INDEX_1] = 1                        # form_number 0 (base)
 row[G.MODEL_INDEX_1] = 1                       # animated model type
 d.pokemon_list = [row]
 
-got = G.get_pokemon_path(d, 0, role="battle")
+got = G.get_pokemon_path(d, 0, role="battle", sv_enabled=True)
 assert base(got[0]) == "0025.battle.gif", got
-got_wait = G.get_pokemon_path(d, 0, role="wait")
+got_wait = G.get_pokemon_path(d, 0, role="wait", sv_enabled=True)
 assert base(got_wait[0]) == "0025.wait.gif", got_wait
 # shiny -> SV skipped by get_pokemon_path (would fall back to the 2D sources)
 row[G.SHINY_INDEX_1] = 1
-got_shiny = G.get_pokemon_path(d, 0, role="battle")
+got_shiny = G.get_pokemon_path(d, 0, role="battle", sv_enabled=True)
 assert "0025.battle.gif" not in (got_shiny[0] or ""), got_shiny
 print("[ok] get_pokemon_path -> SV hit by role; shiny bypasses SV")
+
+
+# --------------------------------------------------------------------------- #
+# 5. SV is opt-in: default (sv_enabled=False) never returns SV paths
+# --------------------------------------------------------------------------- #
+row[G.SHINY_INDEX_1] = 0
+default_off = G.get_pokemon_path(d, 0, role="battle")               # sv_enabled defaults to False
+assert "0025" not in (default_off[0] or ""), default_off           # no SV file -> fell back
+on = G.get_pokemon_path(d, 0, role="battle", sv_enabled=True)
+assert base(on[0]) == "0025.battle.gif", on
+assert rm._is_sv_path(on[0]) and not rm._is_sv_path(default_off[0])
+print("[ok] SV opt-in: off -> fallback path, on -> SV path")
 
 print("\nAll SV sprite checks passed.")

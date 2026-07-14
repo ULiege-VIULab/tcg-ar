@@ -9,6 +9,7 @@ arcface) -- both go through the same ``core.models.identification`` API, and bot
 support deck hot-reload via the ``new_deck`` flag.
 """
 
+import os
 import sys
 import json
 import time
@@ -138,6 +139,8 @@ def test_pipe_on_video(video_path):
     card_id_list = idm.load_card_id_list()  # includes the back card entry
     transform = get_inference_transform(IDENTIFICATION_IMAGE_SIZE)
     renderer = Multi_frame_renderer(number_of_view=1)
+    # SV sprites are opt-in; enable for this headless run with PTCG_SV_SPRITES=1.
+    renderer.sv_enabled = os.environ.get("PTCG_SV_SPRITES", "") == "1"
 
     vid = cv2.VideoCapture(video_path)
     ret, frame_read = vid.read()
