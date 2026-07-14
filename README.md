@@ -168,6 +168,9 @@ the old one — your card database, models and settings are preserved.
 **Uninstalling:** Windows Settings → Apps → TCG-AR (it asks whether to keep
 the downloaded data for a future reinstall).
 
+**Version history:** see the [changelog](CHANGELOG.md) and the
+[Releases page](https://github.com/ULiege-VIULab/tcg-ar/releases).
+
 Everything below this point is for **developers** who want to set up the
 environment manually, retrain the models, or reproduce the paper.
 
@@ -291,6 +294,20 @@ python -m installation.install --metadata --cards --sprites
 (provided by the authors); `download_assets.py` can fetch them into
 `assets/AI database/background/`. They are only needed to **regenerate** the synthetic
 detection/orientation datasets.
+
+### Data sources
+
+TCG-AR does not redistribute Pokémon content; the databases are downloaded from the
+following third-party sources at install/build time. All Pokémon names, card images and
+sprites are property of their respective owners (Nintendo / Creatures Inc. / GAME FREAK inc.).
+
+| Source | What it provides | Used by |
+|---|---|---|
+| **Pokémon TCG API** — <https://dev.pokemontcg.io> (`api.pokemontcg.io`) | Card metadata (sets, names, HP, types, attacks) and the ~20,000 reference **card images**. Requires a free API key. | `installation.install --metadata --cards` |
+| **Poképédia** — <https://www.pokepedia.fr> | The National Pokédex list (Pokémon names and forms) and the **2D static sprites**. | `installation.install --metadata --sprites` |
+| **Project Pokémon** — <https://projectpokemon.org> | The **animated sprite** GIFs rendered onto detected cards. | `installation.install --sprites` |
+| **Google Drive** (via `gdown`) | The authors' **pre-trained model weights** (Oriented R-CNN, EfficientNet-B0, ArcFace), the manually annotated **real evaluation set**, and the **background textures**. | `scripts.download_assets` |
+| **MediaMTX** — <https://github.com/bluenviron/mediamtx> (via `mediamtx-py`) | The **RTSP server** binary, downloaded automatically on first launch. | `inference.main` |
 
 ---
 
