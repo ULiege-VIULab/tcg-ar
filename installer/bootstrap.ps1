@@ -40,7 +40,6 @@ $UvExe    = Join-Path $InstallDir 'tools\uv.exe'
 $StateDir = Join-Path $InstallDir 'state'
 $LogsDir  = Join-Path $InstallDir 'logs'
 $VenvPy   = Join-Path $VenvDir 'Scripts\python.exe'
-$MimExe   = Join-Path $VenvDir 'Scripts\mim.exe'
 
 foreach ($d in @($StateDir, $LogsDir)) {
     if (-not (Test-Path $d)) { New-Item -ItemType Directory -Path $d | Out-Null }
@@ -251,9 +250,13 @@ $WantEmbeddings = [bool]$Choices.components.embeddings
 $ApiKey         = [string]$Choices.api_key
 $DoEmbeddings   = $WantEmbeddings -and $WantModels -and $WantCardDb
 
+# Both stacks run the SAME OpenMMLab 2.x code path (mmcv 2.2 / mmdet 3.3 /
+# mmrotate 1.0.0rc1 + patch_mmlibs) - only Python/torch/CUDA differ. The
+# recipe id is recorded in stack.json; when a release changes a recipe, the
+# next run rebuilds the venv automatically.
 switch ($Stack) {
-    'blackwell' { $PyVersion = '3.14' }
-    'cu118'     { $PyVersion = '3.11' }
+    'blackwell' { $PyVersion = '3.14'; $RecipeId = 'mm2-torch2.12-cu132' }
+    'cu118'     { $PyVersion = '3.11'; $RecipeId = 'mm2-torch2.3-cu118' }
     default     {
         if ($Gui) { Write-ProgressState 'failed' "Unknown stack '$Stack' in install.json." }
         throw "Unknown stack '$Stack' in install.json (expected 'blackwell' or 'cu118')."
@@ -277,13 +280,19 @@ if ($ApiKey) {
 }
 
 # --------------------------------------------------------------------------- #
-# If a previous install used a different GPU stack, rebuild the environment.
+# If a previous install used a different stack/recipe, rebuild the environment.
 # --------------------------------------------------------------------------- #
 $StackJsonPath = Join-Path $StateDir 'stack.json'
 if (Test-Path $StackJsonPath) {
-    $prevStack = (Get-Content $StackJsonPath -Raw | ConvertFrom-Json).stack
-    if ($prevStack -ne $Stack) {
-        Write-Host "Stack changed ($prevStack -> $Stack): rebuilding the Python environment." -ForegroundColor Yellow
+    $prev = Get-Content $StackJsonPath -Raw | ConvertFrom-Json
+    $prevRecipe = [string]$prev.recipe
+    if (-not $prevRecipe) {
+        # stack.json predates recipe ids: the blackwell recipe never changed,
+        # but old cu118 envs (mmrotate 0.x) must be rebuilt.
+        $prevRecipe = if ($prev.stack -eq 'blackwell') { 'mm2-torch2.12-cu132' } else { 'legacy' }
+    }
+    if ($prevRecipe -ne $RecipeId) {
+        Write-Host "Environment recipe changed ($prevRecipe -> $RecipeId): rebuilding the Python environment." -ForegroundColor Yellow
         if (Test-Path $VenvDir) { Remove-Item -Recurse -Force $VenvDir }
         Get-ChildItem $StateDir -Filter '*.done' |
             Where-Object { $_.BaseName -match '^0[1-5]-' } |
@@ -315,8 +324,10 @@ Invoke-Step '02-torch' 'PyTorch (CUDA build, ~3 GB - the longest download)' {
             'torch==2.12.1', 'torchvision',
             '--index-url', 'https://download.pytorch.org/whl/cu132')
     } else {
+        # 2.3.0 is the newest torch with an official prebuilt mmcv 2.2.0
+        # cu118 Windows wheel (see step 3); it still runs on Turing (sm_75).
         Invoke-External $VenvPy @('-m', 'pip', 'install',
-            'torch==2.0.1', 'torchvision==0.15.2', 'torchaudio==2.0.2',
+            'torch==2.3.0', 'torchvision==0.18.0',
             '--index-url', 'https://download.pytorch.org/whl/cu118')
     }
 }
@@ -325,12 +336,19 @@ Invoke-Step '02-torch' 'PyTorch (CUDA build, ~3 GB - the longest download)' {
 # 3. OpenMMLab detector stack
 # --------------------------------------------------------------------------- #
 Invoke-Step '03-mmlab' 'AI detection stack (mmcv / mmdet / mmrotate)' {
+    # Same OpenMMLab 2.x stack on both GPU generations; the app's model code
+    # (mmengine/mmrotate 1.x APIs) requires it. No `mim` anywhere: openmim
+    # pulls in openxlab, which pins setuptools~=60.2.0 and that setuptools
+    # cannot even import on Python >= 3.12.
+    if ($Stack -ne 'blackwell') {
+        # torch 2.3 and the cu118 mmcv wheel are built against the NumPy 1.x
+        # ABI. opencv-python >= 5 hard-requires numpy>=2 and would drag it in,
+        # which breaks torch at the first torch<->numpy interop
+        # ("_ARRAY_API not found"). Pin both before anything can float them.
+        Invoke-External $VenvPy @('-m', 'pip', 'install', 'numpy==1.26.4', 'opencv-python==4.8.1.78')
+    }
+    Invoke-External $VenvPy @('-m', 'pip', 'install', 'mmengine==0.10.7')
     if ($Stack -eq 'blackwell') {
-        # No `mim` on this stack: openmim pulls in openxlab, which pins
-        # setuptools~=60.2.0 and that setuptools cannot even import on
-        # Python >= 3.12. mmdet/mmrotate are pure-Python and on PyPI, and
-        # mmcv comes as a wheel, so plain pip covers everything.
-        Invoke-External $VenvPy @('-m', 'pip', 'install', 'mmengine==0.10.7')
         # mmcv has no official cp314/cu132 wheel; prefer the one bundled with
         # the installer, then an explicit URL, and only then a source build
         # (which requires MSVC - unlikely to exist on an end-user machine).
@@ -344,30 +362,25 @@ Invoke-Step '03-mmlab' 'AI detection stack (mmcv / mmdet / mmrotate)' {
             Write-Host 'No bundled mmcv wheel found - attempting a source build (this needs Visual Studio Build Tools and takes a long time).' -ForegroundColor Yellow
             Invoke-External $VenvPy @('-m', 'pip', 'install', 'mmcv==2.2.0')
         }
-        Invoke-External $VenvPy @('-m', 'pip', 'install', 'mmdet==3.3.0', 'mmrotate==1.0.0rc1')
-        # Leave a Python-3.14-safe setuptools in place (torch pins <82; some
-        # libraries still import pkg_resources at runtime).
-        Invoke-External $VenvPy @('-m', 'pip', 'install', 'setuptools==81.0.0')
-        # Compatibility patches for Python 3.14 + mmrotate 1.x. Idempotent;
-        # exit code 1 means "WARN: installed versions differ from what the
-        # patch expects" - report it but keep going.
-        $rc = Invoke-External $VenvPy @('-m', 'scripts.patch_mmlibs') -WorkDir $AppDir -OkExitCodes @(0, 1)
-        if ($rc -eq 1) {
-            Write-Host 'patch_mmlibs reported warnings (version drift) - continuing; check the log if the app fails to start.' -ForegroundColor Yellow
-        }
-        # The patches gate mmdet/mmrotate imports (version assertions); prove
-        # they took effect before this step is marked done.
-        Invoke-External $VenvPy @('-c', 'import mmdet, mmrotate')
     } else {
-        # torch 2.0.1 is built against the NumPy 1.x ABI. opencv-python >= 5
-        # hard-requires numpy>=2 and would drag it in, which breaks torch at
-        # the first torch<->numpy interop ("_ARRAY_API not found"). Pin both
-        # to the torch-2.0.1-era versions.
-        Invoke-External $VenvPy @('-m', 'pip', 'install', 'openmim', 'numpy==1.26.4', 'opencv-python==4.8.1.78')
-        Invoke-External $MimExe @('install', 'mmcv-full==1.7.2')
-        Invoke-External $MimExe @('install', 'mmdet==2.28.2')
-        Invoke-External $VenvPy @('-m', 'pip', 'install', 'mmrotate==0.3.4')
+        # Official prebuilt cp311/cu118 wheel from the OpenMMLab index.
+        Invoke-External $VenvPy @('-m', 'pip', 'install', 'mmcv==2.2.0',
+            '-f', 'https://download.openmmlab.com/mmcv/dist/cu118/torch2.3/index.html')
     }
+    Invoke-External $VenvPy @('-m', 'pip', 'install', 'mmdet==3.3.0', 'mmrotate==1.0.0rc1')
+    # Leave a modern-Python-safe setuptools in place (torch pins <82; some
+    # libraries still import pkg_resources at runtime).
+    Invoke-External $VenvPy @('-m', 'pip', 'install', 'setuptools==81.0.0')
+    # Compatibility patches (Python 3.14 + version caps + registry wiring).
+    # Idempotent; exit code 1 means "WARN: installed versions differ from
+    # what the patch expects" - report it but keep going.
+    $rc = Invoke-External $VenvPy @('-m', 'scripts.patch_mmlibs') -WorkDir $AppDir -OkExitCodes @(0, 1)
+    if ($rc -eq 1) {
+        Write-Host 'patch_mmlibs reported warnings (version drift) - continuing; check the log if the app fails to start.' -ForegroundColor Yellow
+    }
+    # The patches gate mmdet/mmrotate imports (version assertions); prove
+    # they took effect before this step is marked done.
+    Invoke-External $VenvPy @('-c', 'import mmdet, mmrotate')
 }
 
 # --------------------------------------------------------------------------- #
@@ -384,7 +397,7 @@ Invoke-Step '04-requirements' 'Application dependencies (GUI, streaming, imaging
         Invoke-External $VenvPy @('-m', 'pip', 'install',
             '-r', (Join-Path $AppDir 'requirements.txt'), '-c', $constraints)
     }
-    @{ stack = $Stack; python = $PyVersion; finished = (Get-Date -Format o) } |
+    @{ stack = $Stack; recipe = $RecipeId; python = $PyVersion; finished = (Get-Date -Format o) } |
         ConvertTo-Json | Out-File -Encoding ascii $StackJsonPath
 }
 
@@ -395,11 +408,11 @@ Invoke-Step '05-sanity' 'Checking the Python environment' -NoMarker {
     Invoke-External $VenvPy @('-c',
         "import torch, mmdet, mmrotate, PySide6, cv2; print('torch', torch.__version__, '| CUDA available:', torch.cuda.is_available())")
     if ($Stack -ne 'blackwell') {
-        # torch 2.0.1 needs the NumPy 1.x ABI: prove numpy stayed on 1.x and
-        # that torch<->numpy interop actually works (would otherwise only
-        # explode at the embeddings step, hours later).
+        # The cu118 torch/mmcv builds need the NumPy 1.x ABI: prove numpy
+        # stayed on 1.x and that torch<->numpy interop actually works (would
+        # otherwise only explode at the embeddings step, hours later).
         Invoke-External $VenvPy @('-c',
-            "import numpy, torch, torchvision; assert numpy.__version__.startswith('1.'), 'numpy ' + numpy.__version__ + ' breaks torch 2.0.1'; torch.from_numpy(numpy.zeros(3)); print('numpy', numpy.__version__, '| torchvision', torchvision.__version__, '| interop OK')")
+            "import numpy, torch, torchvision; assert numpy.__version__.startswith('1.'), 'numpy ' + numpy.__version__ + ' breaks the cu118 torch build'; torch.from_numpy(numpy.zeros(3)); print('numpy', numpy.__version__, '| torchvision', torchvision.__version__, '| interop OK')")
     }
 }
 

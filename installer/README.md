@@ -12,9 +12,12 @@ installer is small (~30 MB); everything heavy is downloaded during setup.
    configuration pages and reuses the saved stack/API key).
 2. Copies the application snapshot + a pinned [`uv`](https://github.com/astral-sh/uv)
    binary to `%LOCALAPPDATA%\Programs\TCG-AR` (per-user, **no admin rights**).
-3. Detects the NVIDIA GPU (`nvidia-smi` compute capability) and picks the stack:
-   - compute cap >= 10.0 (RTX 50 / Blackwell) → Python 3.14 + CUDA 13.2 + mmrotate 1.x
-   - 7.5 – 9.x (RTX 20/30/40, Turing/Ampere/Ada/Hopper) → Python 3.11 + CUDA 11.8 + mmrotate 0.3.4
+3. Detects the NVIDIA GPU (`nvidia-smi` compute capability) and picks the stack
+   (both run the **same OpenMMLab 2.x code path** — mmcv 2.2.0, mmdet 3.3.0,
+   mmrotate 1.0.0rc1, `patch_mmlibs` — only Python/torch/CUDA differ):
+   - compute cap >= 10.0 (RTX 50 / Blackwell) → Python 3.14 + torch 2.12 (CUDA 13.2)
+   - 7.5 – 9.x (RTX 20/30/40, Turing/Ampere/Ada/Hopper) → Python 3.11 + torch 2.3 (CUDA 11.8),
+     with the official prebuilt mmcv cu118 Windows wheel from the OpenMMLab index
    The user can override the choice; no GPU → warning with abort default.
 4. Wizard options: pre-trained models (required), card database + sprites
    (needs the user's free [Pokémon TCG API key](https://dev.pokemontcg.io) —
@@ -87,14 +90,21 @@ powershell -ExecutionPolicy Bypass -File installer\build.ps1
   (`$UvVersion` / `$UvSha256`). When bumping: set the version, set
   `$UvSha256 = 'PIN-ME'`, run the build once — it prints the new hash and
   aborts; pin it and re-run.
-- **numpy/opencv pins (CUDA 11.8 stack)**: torch 2.0.1 is built against the
+- **numpy/opencv pins (CUDA 11.8 stack)**: the cu118 torch/mmcv builds use the
   NumPy 1.x ABI, and `opencv-python>=5` hard-requires `numpy>=2` — letting
   the resolver float either one silently poisons the env (torch fails with
   `_ARRAY_API not found` at the first torch↔numpy call). The bootstrap pins
   `numpy==1.26.4` + `opencv-python==4.8.1.78` up front and installs
   `requirements.txt` under a pip constraints file on that stack; the sanity
   step asserts the interop before any long download. Do not "upgrade" these
-  pins without also moving to a numpy-2-native torch.
+  pins without also moving to numpy-2-native torch/mmcv builds.
+- **cu118 torch is pinned to 2.3.0** because that is the newest torch with an
+  official prebuilt `mmcv-2.2.0-cp311-cp311-win_amd64.whl` on the OpenMMLab
+  index (`.../mmcv/dist/cu118/torch2.3/index.html`). The app's model code
+  requires the OpenMMLab 2.x APIs (mmengine, `register_all_modules`), so the
+  legacy mmrotate 0.x stack cannot run it. Recipe changes are recorded in
+  `state\stack.json` (`recipe` field); a mismatch triggers an automatic venv
+  rebuild on the next run.
 - **mmcv wheel (Blackwell)**: mmcv 2.x has no official prebuilt wheel for
   Python 3.14 / CUDA 13.2, and end users have no compiler. Build one once in
   the `tcgar-py314` environment and drop it in `vendor\`:

@@ -198,29 +198,34 @@ Open **PowerShell** in the repository folder before running them.
 Pick the option that matches your GPU. Both use conda
 ([Miniconda](https://docs.conda.io/en/latest/miniconda.html)).
 
-### Option A: Ampere / Turing and earlier (CUDA 11.8, e.g. RTX 3090 / 2080 Ti)
+### Option A: Turing / Ampere / Ada (CUDA 11.8, e.g. RTX 2080 Ti / 3090 / 4090)
 
-Python 3.11, mmrotate 0.3.x / mmdet 2.x / mmcv-full 1.7.x stack.
+Python 3.11, torch 2.3 (CUDA 11.8), and the same OpenMMLab 2.x stack as
+Option B (the model code requires the mmengine / mmrotate 1.x APIs; the
+official prebuilt mmcv cu118 Windows wheel makes this work without a compiler).
 
 ```powershell
 conda create -n tcgar python=3.11
 conda activate tcgar
 
-# PyTorch (CUDA 11.8) — requires an NVIDIA GPU + recent driver
-pip install torch==2.0.1 torchvision==0.15.2 torchaudio==2.0.2 `
-    --index-url https://download.pytorch.org/whl/cu118
+# 1. PyTorch (CUDA 11.8) — requires an NVIDIA GPU + recent driver.
+#    Pin numpy/opencv to NumPy-1.x-ABI versions: the cu118 torch/mmcv builds
+#    predate NumPy 2 and fail at runtime with "_ARRAY_API not found" otherwise.
+pip install torch==2.3.0 torchvision==0.18.0 --index-url https://download.pytorch.org/whl/cu118
+pip install "numpy==1.26.4" "opencv-python==4.8.1.78"
 
-# Oriented-detector stack (mmrotate 0.x)
-pip install openmim "numpy==1.26.4"
-mim install "mmcv-full==1.7.2"
-mim install "mmdet==2.28.2"
-pip install "mmrotate==0.3.4"
+# 2. OpenMMLab 2.x stack (official prebuilt mmcv wheel for cu118 / torch 2.3)
+pip install mmengine==0.10.7
+pip install mmcv==2.2.0 -f https://download.openmmlab.com/mmcv/dist/cu118/torch2.3/index.html
+pip install mmdet==3.3.0 mmrotate==1.0.0rc1
 
-# Remaining pure-Python dependencies
-pip install -r requirements.txt
+# 3. Remaining pure-Python dependencies (constrained so numpy/opencv stay put)
+"numpy==1.26.4", "opencv-python==4.8.1.78" | Set-Content constraints.txt
+pip install -r requirements.txt -c constraints.txt
+
+# 4. Apply compatibility patches (idempotent, safe to re-run)
+python -m scripts.patch_mmlibs
 ```
-(In PowerShell the backtick `` ` `` continues a command onto the next line; you can also put
-the whole `pip install torch ...` command on one line.)
 
 ### Option B: Blackwell (CUDA 13.2, RTX 5080 / 5090)
 
