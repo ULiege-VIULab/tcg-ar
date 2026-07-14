@@ -311,7 +311,11 @@ Invoke-Step '03-mmlab' 'AI detection stack (mmcv / mmdet / mmrotate)' {
         # they took effect before this step is marked done.
         Invoke-External $VenvPy @('-c', 'import mmdet, mmrotate')
     } else {
-        Invoke-External $VenvPy @('-m', 'pip', 'install', 'openmim', 'numpy==1.26.4')
+        # torch 2.0.1 is built against the NumPy 1.x ABI. opencv-python >= 5
+        # hard-requires numpy>=2 and would drag it in, which breaks torch at
+        # the first torch<->numpy interop ("_ARRAY_API not found"). Pin both
+        # to the torch-2.0.1-era versions.
+        Invoke-External $VenvPy @('-m', 'pip', 'install', 'openmim', 'numpy==1.26.4', 'opencv-python==4.8.1.78')
         Invoke-External $MimExe @('install', 'mmcv-full==1.7.2')
         Invoke-External $MimExe @('install', 'mmdet==2.28.2')
         Invoke-External $VenvPy @('-m', 'pip', 'install', 'mmrotate==0.3.4')
@@ -322,7 +326,16 @@ Invoke-Step '03-mmlab' 'AI detection stack (mmcv / mmdet / mmrotate)' {
 # 4. Remaining pure-Python dependencies
 # --------------------------------------------------------------------------- #
 Invoke-Step '04-requirements' 'Application dependencies (GUI, streaming, imaging)' {
-    Invoke-External $VenvPy @('-m', 'pip', 'install', '-r', (Join-Path $AppDir 'requirements.txt'))
+    if ($Stack -eq 'blackwell') {
+        Invoke-External $VenvPy @('-m', 'pip', 'install', '-r', (Join-Path $AppDir 'requirements.txt'))
+    } else {
+        # Constrain the resolver so nothing in requirements.txt can float
+        # numpy/opencv above the torch-2.0.1-compatible pins (see step 3).
+        $constraints = Join-Path $StateDir 'constraints-cu118.txt'
+        @('numpy==1.26.4', 'opencv-python==4.8.1.78') | Out-File -Encoding ascii $constraints
+        Invoke-External $VenvPy @('-m', 'pip', 'install',
+            '-r', (Join-Path $AppDir 'requirements.txt'), '-c', $constraints)
+    }
     @{ stack = $Stack; python = $PyVersion; finished = (Get-Date -Format o) } |
         ConvertTo-Json | Out-File -Encoding ascii $StackJsonPath
 }
@@ -333,6 +346,13 @@ Invoke-Step '04-requirements' 'Application dependencies (GUI, streaming, imaging
 Invoke-Step '05-sanity' 'Checking the Python environment' -NoMarker {
     Invoke-External $VenvPy @('-c',
         "import torch, mmdet, mmrotate, PySide6, cv2; print('torch', torch.__version__, '| CUDA available:', torch.cuda.is_available())")
+    if ($Stack -ne 'blackwell') {
+        # torch 2.0.1 needs the NumPy 1.x ABI: prove numpy stayed on 1.x and
+        # that torch<->numpy interop actually works (would otherwise only
+        # explode at the embeddings step, hours later).
+        Invoke-External $VenvPy @('-c',
+            "import numpy, torch, torchvision; assert numpy.__version__.startswith('1.'), 'numpy ' + numpy.__version__ + ' breaks torch 2.0.1'; torch.from_numpy(numpy.zeros(3)); print('numpy', numpy.__version__, '| torchvision', torchvision.__version__, '| interop OK')")
+    }
 }
 
 # --------------------------------------------------------------------------- #

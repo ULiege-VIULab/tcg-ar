@@ -81,6 +81,14 @@ powershell -ExecutionPolicy Bypass -File installer\build.ps1
   (`$UvVersion` / `$UvSha256`). When bumping: set the version, set
   `$UvSha256 = 'PIN-ME'`, run the build once — it prints the new hash and
   aborts; pin it and re-run.
+- **numpy/opencv pins (CUDA 11.8 stack)**: torch 2.0.1 is built against the
+  NumPy 1.x ABI, and `opencv-python>=5` hard-requires `numpy>=2` — letting
+  the resolver float either one silently poisons the env (torch fails with
+  `_ARRAY_API not found` at the first torch↔numpy call). The bootstrap pins
+  `numpy==1.26.4` + `opencv-python==4.8.1.78` up front and installs
+  `requirements.txt` under a pip constraints file on that stack; the sanity
+  step asserts the interop before any long download. Do not "upgrade" these
+  pins without also moving to a numpy-2-native torch.
 - **mmcv wheel (Blackwell)**: mmcv 2.x has no official prebuilt wheel for
   Python 3.14 / CUDA 13.2, and end users have no compiler. Build one once in
   the `tcgar-py314` environment and drop it in `vendor\`:
