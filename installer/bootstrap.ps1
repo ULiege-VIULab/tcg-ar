@@ -159,25 +159,73 @@ function New-StartMenuShortcut {
     Write-Host "[ok] Start Menu shortcut: $Name" -ForegroundColor Green
 }
 
-function Test-Done([string]$Name) {
-    if ($Repair) { return $false }
-    return Test-Path (Join-Path $StateDir "$Name.done")
-}
 function Set-Done([string]$Name) {
     Get-Date -Format o | Out-File -Encoding ascii (Join-Path $StateDir "$Name.done")
 }
 
+# Cheap data validators: is the produced data still there and plausible?
+# (Presence + size/count heuristics only - integrity is the app's business.)
+$script:WeightSizes = @{
+    'assets\AI models\Detection model\custom_oriented_rcnn_weight.pth'          = 200MB
+    'assets\AI models\Orientation model\orientation_classifier.pth'             = 20MB
+    'assets\AI models\Identification model\identification_model_51_arcface.pth' = 150MB
+}
+function Test-CountAtLeast([string]$RelDir, [int]$Min) {
+    $p = Join-Path $AppDir $RelDir
+    if (-not (Test-Path $p)) { return $false }
+    return (Get-ChildItem $p -File -ErrorAction SilentlyContinue | Select-Object -First ($Min + 1) |
+        Measure-Object).Count -ge $Min
+}
+function Test-ModelsData {
+    foreach ($w in $script:WeightSizes.Keys) {
+        $p = Join-Path $AppDir $w
+        if (-not (Test-Path $p)) { return $false }
+        if ((Get-Item $p).Length -lt $script:WeightSizes[$w]) { return $false }
+    }
+    return $true
+}
+function Test-MetadataData {
+    $card = Join-Path $AppDir 'assets\database\pokemon_card.json'
+    if (-not (Test-Path $card)) { return $false }
+    if ((Get-Item $card).Length -lt 5MB) { return $false }
+    return (Get-ChildItem (Join-Path $AppDir 'assets\database') -Filter '*.json' -File |
+        Measure-Object).Count -ge 5
+}
+function Test-SpritesData {
+    return (Test-CountAtLeast 'assets\database\2D_database' 300) -and
+           (Test-CountAtLeast 'assets\database\2D_animated_database' 50)
+}
+function Test-CardsData {
+    return Test-CountAtLeast 'assets\database\card_database' 15000
+}
+function Test-EmbeddingsData {
+    return Test-CountAtLeast 'assets\embedding_cache' 1
+}
+
 function Invoke-Step {
-    param([string]$Name, [string]$Title, [scriptblock]$Body, [switch]$NoMarker)
+    # Skip rules:
+    #  - normal run: skip when the marker exists AND the data validator (if
+    #    any) confirms the produced data is still there - so a deleted asset
+    #    re-downloads even if its marker survived.
+    #  - repair run: environment steps (no validator) always re-run (fast pip
+    #    no-ops); data steps (with validator) are skipped when their data
+    #    verifies - re-checking the multi-GB card database would otherwise
+    #    take a long time for nothing. Content refreshes are the job of the
+    #    "Update the card database" mode, not of repair.
+    param([string]$Name, [string]$Title, [scriptblock]$Body, [switch]$NoMarker, [scriptblock]$ValidIf)
     $script:StepNum++
     $script:CurStepName = $Title
     $script:CurStepLog = Join-Path $LogsDir ("step-{0:D2}-{1}.log" -f $script:StepNum, $Name)
     # Fresh log per attempt so the wizard's tail view starts clean.
     if (Test-Path $script:CurStepLog) { Remove-Item -Force $script:CurStepLog }
     Write-ProgressState 'running'
-    if ((-not $NoMarker) -and (Test-Done $Name)) {
-        Write-Host "[skip] $Title (already done; use -Repair to force)" -ForegroundColor DarkGreen
-        [IO.File]::AppendAllText($script:CurStepLog, "Already done - skipped.`r`n", $Utf8NoBom)
+    $haveMarker = (-not $NoMarker) -and (Test-Path (Join-Path $StateDir "$Name.done"))
+    $canSkip = $haveMarker
+    if ($canSkip -and $Repair -and -not $ValidIf) { $canSkip = $false }
+    if ($canSkip -and $ValidIf) { $canSkip = [bool](& $ValidIf) }
+    if ($canSkip) {
+        Write-Host "[skip] $Title (already done and verified)" -ForegroundColor DarkGreen
+        [IO.File]::AppendAllText($script:CurStepLog, "Already done and verified - skipped.`r`n", $Utf8NoBom)
         return
     }
     Write-Banner $Title
@@ -359,22 +407,17 @@ Invoke-Step '05-sanity' 'Checking the Python environment' -NoMarker {
 # 6. Pre-trained model weights
 # --------------------------------------------------------------------------- #
 if ($WantModels) {
-    Invoke-Step '06-models' 'Pre-trained AI models (~590 MB)' {
+    Invoke-Step '06-models' 'Pre-trained AI models (~590 MB)' -ValidIf ${function:Test-ModelsData} {
         Invoke-External $VenvPy @('-m', 'scripts.download_assets', '--only', 'models') -WorkDir $AppDir
         # download_assets prints FAILED but still exits 0 on per-file errors,
         # and Google Drive failures can leave a small HTML page (or a wrong
         # file) behind - so verify presence AND a plausible size.
-        $weights = @{
-            'assets\AI models\Detection model\custom_oriented_rcnn_weight.pth'            = 200MB
-            'assets\AI models\Orientation model\orientation_classifier.pth'               = 20MB
-            'assets\AI models\Identification model\identification_model_51_arcface.pth'   = 150MB
-        }
         $bad = @()
-        foreach ($w in $weights.Keys) {
+        foreach ($w in $script:WeightSizes.Keys) {
             $p = Join-Path $AppDir $w
             if (-not (Test-Path $p)) {
                 $bad += "$w (missing)"
-            } elseif ((Get-Item $p).Length -lt $weights[$w]) {
+            } elseif ((Get-Item $p).Length -lt $script:WeightSizes[$w]) {
                 $bad += "$w (only $([int]((Get-Item $p).Length / 1MB)) MB - corrupt or wrong file on the download host)"
                 Remove-Item -Force $p   # so the next retry re-downloads it
             }
@@ -393,13 +436,13 @@ if ($WantCardDb) {
     if (-not $env:POKEMON_TCG_API_KEY) {
         throw 'The card-database component is selected but no API key was recorded. Re-run the installer and enter your key (free at https://dev.pokemontcg.io).'
     }
-    Invoke-Step '07-metadata' 'Card metadata (sets, attacks, HP, ...)' {
+    Invoke-Step '07-metadata' 'Card metadata (sets, attacks, HP, ...)' -ValidIf ${function:Test-MetadataData} {
         Invoke-External $VenvPy @('-m', 'installation.install', '--metadata') -WorkDir $AppDir
     }
-    Invoke-Step '08-sprites' '2D sprites (animated + static)' {
+    Invoke-Step '08-sprites' '2D sprites (animated + static)' -ValidIf ${function:Test-SpritesData} {
         Invoke-External $VenvPy @('-m', 'installation.install', '--sprites') -WorkDir $AppDir
     }
-    Invoke-Step '09-cards' 'Card images (~20,000 cards, several GB - the longest step)' {
+    Invoke-Step '09-cards' 'Card images (~20,000 cards, several GB - the longest step)' -ValidIf ${function:Test-CardsData} {
         # --update fetches only missing images, so an interrupted run resumes.
         Invoke-External $VenvPy @('-m', 'installation.install', '--cards', '--update') -WorkDir $AppDir
     }
@@ -414,7 +457,7 @@ if ($WantCardDb) {
 # 10. Embedding cache (makes the first app start-up instant)
 # --------------------------------------------------------------------------- #
 if ($DoEmbeddings) {
-    Invoke-Step '10-embeddings' 'Pre-computing card embeddings' {
+    Invoke-Step '10-embeddings' 'Pre-computing card embeddings' -ValidIf ${function:Test-EmbeddingsData} {
         Invoke-External $VenvPy @('-m', 'installation.install', '--embeddings') -WorkDir $AppDir
     }
 } elseif ($WantEmbeddings) {

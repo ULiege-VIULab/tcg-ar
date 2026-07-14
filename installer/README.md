@@ -42,7 +42,13 @@ installer is small (~30 MB); everything heavy is downloaded during setup.
    The provisioning itself: uv installs a **private CPython**, creates a venv,
    installs torch/mm*/deps, applies `scripts.patch_mmlibs` (Blackwell),
    downloads model weights, builds the card DB and the embedding cache.
-   Every step is idempotent (`state\*.done` markers).
+   Every step is idempotent (`state\*.done` markers + cheap data validators:
+   a step is skipped when its marker exists AND its output still looks sane —
+   weights above minimum sizes, database/sprite/card/embedding counts).
+   **Repair** re-runs the environment steps (fast pip no-ops) but skips data
+   steps whose data validates — it heals what is broken/missing rather than
+   re-fetching content; refreshing content is the "Update the card database"
+   mode's job.
 6. Isolation: nothing outside the install folder is modified except the
    `POKEMON_TCG_API_KEY` user environment variable (removed on uninstall).
    No PATH edits, no system Python, no registry Python entries.
