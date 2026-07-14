@@ -34,6 +34,8 @@ def build_metadata_databases():
 
 
 def download_sprites():
+    print("Downloading Scarlet/Violet animated sprites (primary source)...")
+    db.create_SV_animated_database()
     print("Downloading 2D sprites...")
     db.create_2D_database()
     print("Downloading 2D-animated sprites...")
@@ -102,7 +104,9 @@ def main():
     parser.add_argument("--metadata", action="store_true", help="pokemon db + card file + json databases")
     parser.add_argument("--json-databases", action="store_true", help="only the six identification json databases")
     parser.add_argument("--cards", action="store_true", help="download the card-image database")
-    parser.add_argument("--sprites", action="store_true", help="download 2D / 2D-animated sprites")
+    parser.add_argument("--sprites", action="store_true", help="download SV animated + 2D / 2D-animated sprites")
+    parser.add_argument("--sv-sprites", action="store_true",
+                        help="download only the Scarlet/Violet animated sprites (primary source)")
     parser.add_argument("--detection-dataset", action="store_true")
     parser.add_argument("--orientation-dataset", action="store_true")
     parser.add_argument("--identification-dataset", action="store_true")
@@ -132,6 +136,8 @@ def main():
         download_cards(update=args.update); did_something = True
     if args.sprites:
         download_sprites(); did_something = True
+    if args.sv_sprites:
+        db.create_SV_animated_database(); did_something = True
     if args.detection_dataset or args.orientation_dataset or args.identification_dataset:
         generate_datasets(args.detection_dataset, args.orientation_dataset, args.identification_dataset)
         did_something = True

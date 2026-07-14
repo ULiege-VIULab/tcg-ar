@@ -64,6 +64,8 @@ assets/database/2D_animated_database/*
 !assets/database/2D_animated_database/.gitkeep
 assets/database/2D_database/*
 !assets/database/2D_database/.gitkeep
+assets/database/SV_animated/*
+!assets/database/SV_animated/.gitkeep
 assets/database/*.json
 !assets/database/wrong_scan_cards.json
 

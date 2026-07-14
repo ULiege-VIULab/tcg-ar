@@ -96,6 +96,21 @@ POKEMON_2D_ANIMATED_MODEL_FOLDER = DATABASE_FOLDER_PATH + "2D_animated_database"
 POKEMON_2D_DATABASE_FOLDER = "2D_database"
 POKEMON_2D_MODEL_FOLDER = DATABASE_FOLDER_PATH + "2D_database" + os.sep
 
+# Scarlet/Violet animated sprites (primary source, higher quality) scraped from
+# the Scavio GIFs Tumblr. Four idle/battle GIFs per Pokemon; see
+# core.databases.create_SV_animated_database. Falls back to the 2D animated
+# (gen 1-8) then the static 2D database for Pokemon/shiny it does not cover.
+SV_ANIMATED_DATABASE_FOLDER = "SV_animated"
+SV_ANIMATED_MODEL_FOLDER = DATABASE_FOLDER_PATH + "SV_animated" + os.sep
+SV_INDEX_FILE = SV_ANIMATED_MODEL_FOLDER + "sv_index.json"
+# Tumblr blog exposing the (key-less) legacy read API. Overridable for mirrors.
+SV_ANIMATED_SOURCE = os.environ.get("TCGAR_SV_SOURCE", "https://scaviogifs.tumblr.com")
+# The source GIFs are large (up to ~470 px, 100-220 frames); the renderer holds
+# every frame in RAM, so they are re-encoded on download to a sane height and
+# frame budget (the total loop time is preserved).
+SV_MAX_HEIGHT = 256
+SV_MAX_FRAMES = 72
+
 # --------------------------------------------------------------------------- #
 # User interface / broadcast overlay
 # --------------------------------------------------------------------------- #

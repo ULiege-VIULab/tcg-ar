@@ -39,6 +39,25 @@ HP_BG = (30, 40, 55)
 # --------------------------------------------------------------------------- #
 # Board logic
 # --------------------------------------------------------------------------- #
+def active_card_indices(game_state, center=(WIDTH // 2, HEIGHT // 2)):
+    """The set of card indices that are the *active* Pokemon: on each physical side
+    (left/right half of the board) the real Pokemon nearest the board centre.
+
+    Shared single definition of "active" used both by the broadcast overlay
+    (``board_layout``) and by the AR renderer (which plays the battle animation
+    for the active Pokemon and idle for benched ones)."""
+    sides = {"l": [], "r": []}
+    for i in range(game_state.get_number_of_card()):
+        # Only real Pokemon; Trainer/Energy (zero-Pokedex slot) and the card back
+        # are not "active".
+        if not game_state.is_pokemon_card(i) or game_state.get_pokemon_card_id(i) == BACK_CARD_ID:
+            continue
+        x, y = game_state.get_card_location(i)
+        dist = (x - center[0]) ** 2 + (y - center[1]) ** 2
+        sides["l" if x < center[0] else "r"].append((dist, i))
+    return {min(cards)[1] for cards in sides.values() if cards}
+
+
 def board_layout(game_state, side_swap=False, center=(WIDTH // 2, HEIGHT // 2), max_bench=MAX_BENCH):
     """Split the Pokemon cards on the board into the two players' active + bench.
 
@@ -46,6 +65,7 @@ def board_layout(game_state, side_swap=False, center=(WIDTH // 2, HEIGHT // 2), 
     per side the card nearest the board centre is the active, the rest are bench
     (capped, ordered left->right).  ``side_swap`` decides which physical side maps to
     player1 (left panel).  Non-Pokemon cards are ignored here."""
+    actives = active_card_indices(game_state, center)
     left, right = [], []
     for i in range(game_state.get_number_of_card()):
         # Only real Pokemon belong in the broadcast active/bench sets. Trainer/Energy
@@ -61,8 +81,9 @@ def board_layout(game_state, side_swap=False, center=(WIDTH // 2, HEIGHT // 2), 
     def split(cards):
         if not cards:
             return None, []
-        cards = sorted(cards, key=lambda c: c["dist"])
-        return cards[0], sorted(cards[1:], key=lambda c: c["x"])[:max_bench]
+        active = next((c for c in cards if c["index"] in actives), None)
+        bench = sorted([c for c in cards if c is not active], key=lambda c: c["x"])[:max_bench]
+        return active, bench
 
     la, lb = split(left)
     ra, rb = split(right)

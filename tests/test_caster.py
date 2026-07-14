@@ -16,6 +16,7 @@ class Stub:
     def get_number_of_pokemon(self, i): return 1
     def get_card_location(self, i): return self.items[i][1], self.items[i][2]
     def get_pokemon_card_id(self, i): return self.items[i][0]
+    def is_pokemon_card(self, i): return True
 
 items = [(picks[0], 880, 540)]                                  # left active (near centre)
 items += [(picks[1 + k], 180 + k * 70, 300) for k in range(5)]  # left bench

@@ -304,10 +304,13 @@ sprites are property of their respective owners (Nintendo / Creatures Inc. / GAM
 | Source | What it provides | Used by |
 |---|---|---|
 | **Pokémon TCG API** — <https://dev.pokemontcg.io> (`api.pokemontcg.io`) | Card metadata (sets, names, HP, types, attacks) and the ~20,000 reference **card images**. Requires a free API key. | `installation.install --metadata --cards` |
-| **Poképédia** — <https://www.pokepedia.fr> | The National Pokédex list (Pokémon names and forms) and the **2D static sprites**. | `installation.install --metadata --sprites` |
-| **Project Pokémon** — <https://projectpokemon.org> | The **animated sprite** GIFs rendered onto detected cards. | `installation.install --sprites` |
+| **Scavio GIFs** — <https://scaviogifs.tumblr.com> | The **primary animated sprites**: high-quality Scarlet/Violet idle + battle GIFs (National Dex #0001–1025). Rendered onto detected cards, with the idle animation on benched Pokémon and the battle animation on the active one. | `installation.install --sprites` / `--sv-sprites` |
+| **Project Pokémon** — <https://projectpokemon.org> | Fallback **animated sprites** (gen 1–8) for Pokémon/shiny the SV set does not cover. | `installation.install --sprites` |
+| **Poképédia** — <https://www.pokepedia.fr> | The National Pokédex list (Pokémon names and forms) and the **2D static sprites** (final fallback). | `installation.install --metadata --sprites` |
 | **Google Drive** (via `gdown`) | The authors' **pre-trained model weights** (Oriented R-CNN, EfficientNet-B0, ArcFace), the manually annotated **real evaluation set**, and the **background textures**. | `scripts.download_assets` |
 | **MediaMTX** — <https://github.com/bluenviron/mediamtx> (via `mediamtx-py`) | The **RTSP server** binary, downloaded automatically on first launch. | `inference.main` |
+
+Animated sprites are resolved per card in this priority: **Scavio SV → Project Pokémon (gen 1–8) → Poképédia static PNG**. Scavio renders are property of Creatures Inc.; like the other databases they are downloaded at build time and **not redistributed** with this project.
 
 ---
 

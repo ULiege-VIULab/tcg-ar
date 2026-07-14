@@ -8,6 +8,23 @@ major = breaking changes. Each release on the
 [Releases page](https://github.com/ULiege-VIULab/tcg-ar/releases) mirrors its
 entry below.
 
+## [1.1.0] — 2026-07-14
+
+Higher-quality animated sprites.
+
+- **Scarlet/Violet animated sprites** (from the Scavio GIFs Tumblr) are now the
+  primary sprite source: high-quality idle + battle animations for the SV
+  roster (National Dex #0001–1025), downloaded and re-encoded (downscaled +
+  frame-capped) during the sprite build.
+- The **active Pokémon** (nearest the board centre on each side) now plays its
+  **battle** animation; benched Pokémon play the **idle** animation with the
+  occasional fidget.
+- Automatic fallback per Pokémon: Scavio SV → the previous gen 1–8 animated
+  sprites → the static 2D sprite (so shiny and uncovered Pokémon are unchanged).
+- Building the sprites (part of the card-database step) now also fetches the SV
+  set; it adds time and a few GB. "Repair" verifies the SV set and re-downloads
+  only what is missing; "Update card database" refreshes it after new releases.
+
 ## [1.0.0] — 2026-07-14
 
 First public release of the one-click Windows installer.
@@ -30,4 +47,5 @@ First public release of the one-click Windows installer.
 - In-place upgrades preserve the card database, models and settings; uninstall
   optionally keeps the downloaded data.
 
+[1.1.0]: https://github.com/ULiege-VIULab/tcg-ar/releases/tag/v1.1.0
 [1.0.0]: https://github.com/ULiege-VIULab/tcg-ar/releases/tag/v1.0.0

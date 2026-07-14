@@ -14,6 +14,7 @@ packages all call into this module.
 """
 
 import os
+import io
 import re
 import sys
 import json
@@ -22,6 +23,8 @@ from pathlib import Path
 from urllib.request import urlopen
 
 import cv2
+import imageio
+import imageio.v3 as iio3
 import numpy as np
 import requests
 from tqdm import tqdm
@@ -254,6 +257,225 @@ def create_2D_animated_database():
         soup = BeautifulSoup(r.text, 'html.parser')
         images = soup.findAll('img', src=re.compile(".gif"))
         download_gif_images(images, POKEMON_2D_ANIMATED_MODEL_FOLDER)
+
+
+# --------------------------------------------------------------------------- #
+# Scarlet/Violet animated sprites (Scavio GIFs) -- the primary sprite source
+# --------------------------------------------------------------------------- #
+# Each Tumblr photo post is one Pokemon (form) with FOUR GIFs, always in this
+# order (stated in every post caption): Default Wait, Battle Wait, Default Idle
+# 1, Default Idle 2.  We keep all four; the renderer plays "battle" for the
+# active Pokemon and "wait" (with occasional idle1/idle2) for benched ones.
+SV_ROLES = ("wait", "battle", "idle1", "idle2")
+
+
+def _sv_normalize_form(form):
+    """Canonical form key shared by the scraper (caption parenthetical) and the
+    renderer (database form string + gender), so both sides match without a
+    hand-maintained alias table. '' means the base form."""
+    if not form:
+        return ""
+    s = form.lower()
+    s = re.sub(r"\bforms?\b", " ", s)          # drop the word "form"
+    s = re.sub(r"[^a-z0-9]+", "-", s).strip("-")
+    return s
+
+
+def _sv_read_api(start, num, source=None):
+    """One page of the Tumblr legacy read API (no key needed). Returns the parsed
+    dict. The endpoint replies with ``var tumblr_api_read = {...};`` JS."""
+    base = (source or SV_ANIMATED_SOURCE).rstrip("/")
+    url = f"{base}/api/read/json?type=photo&num={num}&start={start}"
+    text = _retry(lambda: requests.get(url, timeout=30).text)
+    text = text.strip()
+    lb, rb = text.find("{"), text.rfind("}")
+    if lb == -1 or rb == -1:
+        raise ValueError("unexpected Tumblr read-api response")
+    return json.loads(text[lb:rb + 1])
+
+
+def _sv_photo_urls(post):
+    """Ordered list of the highest-resolution photo URLs of a Tumblr photo post,
+    covering both the legacy ``photos`` array and the newer npf ``regular-body``
+    HTML the read-api sometimes returns."""
+    def _largest(entry):
+        keyed = [(int(m.group(1)), entry[k]) for k in entry
+                 for m in [re.match(r"photo-url-(\d+)", k)] if m]
+        return max(keyed)[1] if keyed else None
+
+    photos = post.get("photos") or []
+    if photos:
+        return [u for u in (_largest(p) for p in photos) if u]
+    # Fallback: parse the embedded HTML for gif <img> sources (largest srcset).
+    body = post.get("regular-body") or post.get("photo-caption") or ""
+    urls = []
+    for img in BeautifulSoup(body, "html.parser").find_all("img"):
+        best, best_w = None, -1
+        for cand in (img.get("srcset") or "").split(","):
+            parts = cand.split()
+            if parts and ".gif" in parts[0]:
+                w = int(re.sub(r"\D", "", parts[1])) if len(parts) > 1 and re.search(r"\d", parts[1]) else 0
+                if w >= best_w:
+                    best, best_w = parts[0], w
+        src = best or (img.get("src") if ".gif" in (img.get("src") or "") else None)
+        if src:
+            urls.append(src)
+    return urls
+
+
+def _sv_slug_tail(slug):
+    """(national_dex_number, [name/form tokens]) from a post slug, or (None, []).
+    The post caption is empty on this blog, so the slug is the only identity
+    source: ``1024-terapagos-stellar-form`` -> (1024, [terapagos, stellar, form])."""
+    m = re.match(r"0*(\d+)-?(.*)$", slug or "")
+    if not m:
+        return None, []
+    number = int(m.group(1))
+    tokens = [t for t in m.group(2).split("-") if t]
+    return number, tokens
+
+
+def _token_lcp(list_of_token_lists):
+    """Longest common prefix of several token lists (used to recover a Pokemon's
+    name shared by all its form slugs, so the remaining tokens are the form)."""
+    if not list_of_token_lists:
+        return []
+    prefix = list(list_of_token_lists[0])
+    for toks in list_of_token_lists[1:]:
+        i = 0
+        while i < len(prefix) and i < len(toks) and prefix[i] == toks[i]:
+            i += 1
+        prefix = prefix[:i]
+        if not prefix:
+            break
+    return prefix
+
+
+def _sv_reencode(raw, max_h=None, max_frames=None):
+    """Shrink a downloaded GIF to the renderer's budget: cap the height (keep
+    aspect + transparency) and the frame count (uniform subsample), preserving
+    the total loop time. Returns re-encoded GIF bytes, or the input unchanged if
+    it is already small. Transparency is kept by writing with a per-frame
+    ``disposal=2`` (restore-to-background) and a transparency index."""
+    max_h = max_h or SV_MAX_HEIGHT
+    max_frames = max_frames or SV_MAX_FRAMES
+    frames = imageio.mimread(io.BytesIO(raw), format=".gif", **{"mode": "RGBA"})
+    if not frames:
+        return raw
+    n = len(frames)
+    try:
+        dur_ms = iio3.immeta(io.BytesIO(raw), extension=".gif").get("duration") or 20
+    except Exception:
+        dur_ms = 20
+    total_s = n * (float(dur_ms) / 1000.0)
+
+    if n > max_frames:
+        idx = sorted(set(np.linspace(0, n - 1, max_frames).round().astype(int).tolist()))
+        frames = [frames[i] for i in idx]
+    m = len(frames)
+    # imageio's GIF writer takes the frame delay in MILLISECONDS (and the
+    # renderer reads it back the same way via immeta). Keep the total loop time.
+    per_frame_ms = max(round(total_s * 1000.0 / m), 20)
+
+    h, w = frames[0].shape[:2]
+    if h > max_h:
+        nw = max(1, int(round(w * max_h / h)))
+        frames = [cv2.resize(f, (nw, max_h), interpolation=cv2.INTER_AREA) for f in frames]
+
+    # Binarise the alpha (GIF supports only 1-bit transparency) so the
+    # re-encoder emits a clean transparency index instead of dropping alpha.
+    out_frames = []
+    for f in frames:
+        f = f.copy()
+        f[..., 3] = np.where(f[..., 3] >= 128, 255, 0).astype(np.uint8)
+        out_frames.append(f)
+
+    buf = io.BytesIO()
+    imageio.mimwrite(buf, out_frames, format="GIF", duration=per_frame_ms,
+                     loop=0, disposal=2, transparency=0)
+    return buf.getvalue()
+
+
+def create_SV_animated_database(limit=None):
+    """Scrape the Scavio SV idle/battle GIFs into ``SV_ANIMATED_MODEL_FOLDER`` and
+    write the ``sv_index.json`` manifest (number -> form_key -> {role: filename}).
+
+    Two passes: first page the whole blog to collect every post's (number, slug
+    tokens, gif URLs); then, per national-dex number, the shared name is the
+    token-wise longest common prefix of its slugs and the remaining tokens are
+    the form key (so Terapagos/Ogerpon forms no longer collide under the base).
+
+    Idempotent / resumable: existing GIF files are never re-downloaded.
+    ``limit`` caps the number of posts (for testing)."""
+    create_nested_folders(SV_ANIMATED_MODEL_FOLDER)
+
+    # -- pass 1: collect every post (metadata only; URLs are already in the page)
+    collected = []      # (number, tokens, urls)
+    page = 50
+    start = 0
+    total = None
+    while True:
+        data = _sv_read_api(start, page)
+        if total is None:
+            total = data.get("posts-total") or 0
+        posts = data.get("posts") or []
+        if not posts:
+            break
+        for post in posts:
+            number, tokens = _sv_slug_tail(post.get("slug"))
+            if number is None:
+                continue
+            urls = _sv_photo_urls(post)
+            if urls:
+                collected.append((number, tokens, urls))
+            if limit is not None and len(collected) >= limit:
+                break
+        if limit is not None and len(collected) >= limit:
+            break
+        start += page
+        if start >= total:
+            break
+
+    # -- group by number, recover the name prefix, assign form keys
+    by_number = {}
+    for number, tokens, urls in collected:
+        by_number.setdefault(number, []).append((tokens, urls))
+
+    manifest = {}
+    downloaded = 0
+    for number, variants in tqdm(sorted(by_number.items()), desc="SV sprites", unit="pokemon"):
+        name_len = len(_token_lcp([toks for toks, _ in variants]))
+        for tokens, urls in variants:
+            form_key = _sv_normalize_form("-".join(tokens[name_len:]))
+            stem = f"{number:04d}" + (f"__{form_key}" if form_key else "")
+            entry = manifest.setdefault(str(number), {}).setdefault(form_key, {})
+            for idx, role in enumerate(SV_ROLES):
+                if idx >= len(urls):
+                    break
+                fname = f"{stem}.{role}.gif"
+                dest = os.path.join(SV_ANIMATED_MODEL_FOLDER, fname)
+                entry[role] = fname
+                if os.path.exists(dest):
+                    continue
+                try:
+                    content = _retry(lambda u=urls[idx]: requests.get(u, timeout=60).content)
+                    try:
+                        content = _sv_reencode(content)
+                    except Exception as e:   # keep the original if re-encode fails
+                        print(f"  SV #{number} {role}: re-encode failed ({e}), keeping original",
+                              file=sys.stderr)
+                    with open(dest, "wb") as f:
+                        f.write(content)
+                    downloaded += 1
+                    time.sleep(0.2)   # be polite to Tumblr
+                except _TRANSIENT_ERRORS as e:
+                    print(f"  SV #{number} {role}: {type(e).__name__}, skipped", file=sys.stderr)
+                    entry.pop(role, None)
+
+    with open(SV_INDEX_FILE, "w", encoding="utf-8") as f:
+        json.dump(manifest, f, ensure_ascii=False, indent=1)
+    print(f"SV animated database: {len(manifest)} Pokemon indexed, "
+          f"{downloaded} new GIFs downloaded, manifest at {SV_INDEX_FILE}")
 
 
 def download_images(images, list_name, folder_name):

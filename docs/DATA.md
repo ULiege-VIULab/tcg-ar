@@ -17,7 +17,8 @@ rest is fetched with `python -m scripts.download_assets` or built with `installa
 | `assets/AI database/{detection,orientation,identification}/` | synthetic training datasets | **build** (`installation.install --*-dataset`) |
 | `assets/database/card_database/` | ~20 k reference card images | **build** (`installation.install --cards`, Pokémon TCG API) |
 | `assets/database/card_database/back1-1.jpg` | the card back (not in the API) | **shipped** |
-| `assets/database/2D_animated_database/`, `2D_database/` | creature sprites | **build** (`installation.install --sprites`) |
+| `assets/database/SV_animated/` | primary animated sprites (Scarlet/Violet idle + battle GIFs, `sv_index.json` manifest) | **build** (`installation.install --sprites` / `--sv-sprites`) |
+| `assets/database/2D_animated_database/`, `2D_database/` | fallback creature sprites (gen 1–8 animated, static PNG) | **build** (`installation.install --sprites`) |
 | `assets/database/*.json` | card metadata (encyclopedia, id/number/type/set, …) | **build** (`installation.install --metadata`) |
 | `assets/database/no_pokemon.png` | placeholder for non-creature cards | **shipped** |
 | `assets/database/wrong_scan_cards.json` | list of wrongly-scanned reference cards | **shipped** (rebuild with `installation.find_wrong_scans`) |
@@ -31,7 +32,7 @@ Commands are shown for **Windows PowerShell** (Linux/macOS: replace `$env:VAR=".
 $env:POKEMON_TCG_API_KEY = "your-key"          # or: setx POKEMON_TCG_API_KEY your-key (new shells)
 python -m installation.install --metadata     # pokémon list + card encyclopedia + JSON databases
 python -m installation.install --cards        # download the ~20k card images
-python -m installation.install --sprites      # download the 2D / 2D-animated sprites
+python -m installation.install --sprites      # download the SV animated + 2D fallback sprites (long)
 # or everything at once (also generates the synthetic datasets):
 python -m installation.install --all
 ```

@@ -191,7 +191,10 @@ function Test-MetadataData {
         Measure-Object).Count -ge 5
 }
 function Test-SpritesData {
-    return (Test-CountAtLeast 'assets\database\2D_database' 300) -and
+    # SV_animated is the primary source (~4 GIFs per Pokemon); the 2D sources
+    # remain as fallback. Require all three to be non-trivially populated.
+    return (Test-CountAtLeast 'assets\database\SV_animated' 2000) -and
+           (Test-CountAtLeast 'assets\database\2D_database' 300) -and
            (Test-CountAtLeast 'assets\database\2D_animated_database' 50)
 }
 function Test-CardsData {

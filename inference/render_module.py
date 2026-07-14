@@ -4,12 +4,32 @@ import re
 import sys
 import json
 import time
+import random
 import imageio
 import numpy as np
 from multiprocessing import shared_memory
 
 from core.config import *
 from inference.registration_module import compute_destination_point
+from inference.caster_module import active_card_indices
+
+
+def _sv_norm_form(form):
+    """Canonical SV form key. MUST stay identical to
+    ``core.databases._sv_normalize_form`` so the renderer looks sprites up under
+    the same keys the scraper wrote. '' is the base/default form."""
+    if not form:
+        return ""
+    s = form.lower()
+    s = re.sub(r"\bforms?\b", " ", s)
+    s = re.sub(r"[^a-z0-9]+", "-", s).strip("-")
+    return s
+
+
+# Roles come from the four Scavio GIFs per Pokemon (see core.databases).
+SV_ROLE_BATTLE = "battle"   # active Pokemon
+SV_ROLE_WAIT = "wait"       # benched Pokemon (default idle)
+SV_ROLE_IDLES = ("idle1", "idle2")   # occasional benched fidgets
 
 # Side (auxiliary) views render sprites smaller than the zenithal view: this factor is
 # applied to the stored (zenithal-sized) sprite, e.g. 150% / 200% = 0.75.
@@ -54,6 +74,16 @@ class Game_state:
             raise FileNotFoundError
         self.database = json.load(database_file)
         database_file.close()
+
+        # Scarlet/Violet animated sprites (primary source). Manifest maps
+        # national-dex number -> form key -> {role: filename}; absent when the
+        # SV database has not been built (renderer then uses the old sources).
+        self.sv_index = {}
+        try:
+            with open(SV_INDEX_FILE, "r", encoding="utf-8") as f:
+                self.sv_index = json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError):
+            self.sv_index = {}
 
         card_slot = 0
         number_card = 0
@@ -354,7 +384,41 @@ class Game_state:
         self.pokemon_list[card_index][self.FORM_INDEX_1 + pokemon_index] = form
         self.pokemon_list[card_index][self.MODEL_INDEX_1 + pokemon_index] = model
 
-    def get_pokemon_path(self, card_index):
+    def _sv_lookup(self, dex_number, db_form, form_number, female, role):
+        """Absolute path to the Scarlet/Violet GIF for a Pokemon+form at the given
+        animation ``role``, or ``None`` when SV does not cover it (caller then
+        falls back). The DB's default form (index 0, e.g. "Base"/"Normal Form")
+        maps to the SV base key ""; other forms match by normalized name."""
+        variants = self.sv_index.get(str(dex_number))
+        if not variants:
+            return None
+        norm = _sv_norm_form(db_form)
+        is_default = (form_number == 0) or norm in ("base", "normal", "default", "")
+
+        candidates = []
+        if female:
+            candidates.append("female" if is_default else (norm + "-female"))
+        if is_default:
+            candidates += ["", norm]          # base first; norm covers e.g. Ogerpon teal-mask
+        else:
+            candidates.append(norm)           # a real form: never fall back to base here
+
+        seen = set()
+        for key in candidates:
+            if key in seen:
+                continue
+            seen.add(key)
+            entry = variants.get(key)
+            if not entry:
+                continue
+            fname = entry.get(role) or entry.get(SV_ROLE_WAIT)
+            if fname:
+                p = SV_ANIMATED_MODEL_FOLDER + fname
+                if os.path.exists(p):
+                    return p
+        return None
+
+    def get_pokemon_path(self, card_index, role=SV_ROLE_WAIT):
         self.update_object()
         paths = []
 
@@ -367,6 +431,21 @@ class Game_state:
                 return [NO_POKEMON_PATH]
             #2Danimated
             if type_of_file == 1:
+                # Primary source: Scarlet/Violet animated sprites (role-aware:
+                # battle for the active Pokemon, wait/idle for benched). Falls
+                # through to the gen1-8 animated then the static PNG for shiny /
+                # forms / Pokemon it does not cover.
+                dex = self.pokemon_list[card_index][self.POKEMON_POKEDEX_NUMBER_INDEX_1 + i]
+                form_number = self.pokemon_list[card_index][self.FORM_INDEX_1 + i] - 1
+                db_form = self.database[dex - 1]["Forms"][form_number]["Form"]
+                shiny = self.pokemon_list[card_index][self.SHINY_INDEX_1 + i]
+                female = self.pokemon_list[card_index][self.FEMALE_INDEX_1 + i]
+                if not shiny:
+                    sv_path = self._sv_lookup(dex, db_form, form_number, female, role)
+                    if sv_path:
+                        paths.append(sv_path)
+                        continue
+
                 unwanted_pattern = ' |:|\''
                 number = self.pokemon_list[card_index][self.POKEMON_POKEDEX_NUMBER_INDEX_1 + i] - 1
                 name = self.database[number]["Forms"][0]["English_name"]
@@ -538,6 +617,8 @@ class Multi_frame_renderer:
         # Key = tuple of the shared-memory fields that determine the path.
         self._path_cache: dict = {}
         self._path_cache_key: dict = {}
+        # Per-card SV animation role state (benched idle fidget scheduling).
+        self._idle_state: dict = {}
     
     def load_models(self, files_to_load):
         #remove entry from pokemon_dict that is not in files_to_load
@@ -639,10 +720,31 @@ class Multi_frame_renderer:
 
             self._build_side_model(pokemon_index)
 
-    def _cached_pokemon_path(self, game_state, i):
-        """Return sprite paths for card i, recomputing only when the card's fields change."""
+    def _card_role(self, i, is_active, now):
+        """Animation role for card i: 'battle' when it is the active Pokemon,
+        otherwise 'wait' with the occasional short idle1/idle2 fidget. Only SV
+        sprites use the role; the fallback sources ignore it."""
+        if is_active:
+            self._idle_state.pop(i, None)
+            return SV_ROLE_BATTLE
+        st = self._idle_state.get(i)
+        if st is None or now >= st[1]:
+            if st is not None and st[0] != SV_ROLE_WAIT:
+                nxt, dur = SV_ROLE_WAIT, random.uniform(4.0, 8.0)   # rest after a fidget
+            elif random.random() < 0.20:
+                nxt, dur = random.choice(SV_ROLE_IDLES), 2.5        # occasional fidget
+            else:
+                nxt, dur = SV_ROLE_WAIT, random.uniform(3.0, 6.0)
+            st = (nxt, now + dur)
+            self._idle_state[i] = st
+        return st[0]
+
+    def _cached_pokemon_path(self, game_state, i, role=SV_ROLE_WAIT):
+        """Return sprite paths for card i, recomputing only when the card's fields
+        (or its SV animation role) change."""
         pl = game_state.pokemon_list[i]
         key = (
+            role,
             pl[Game_state.NUMBER_POKEMON_INDEX],
             pl[Game_state.POKEMON_POKEDEX_NUMBER_INDEX_1],
             pl[Game_state.POKEMON_POKEDEX_NUMBER_INDEX_2],
@@ -661,7 +763,7 @@ class Multi_frame_renderer:
             pl[Game_state.SHINY_INDEX_3],
         )
         if self._path_cache_key.get(i) != key:
-            self._path_cache[i] = game_state.get_pokemon_path(i)
+            self._path_cache[i] = game_state.get_pokemon_path(i, role=role)
             self._path_cache_key[i] = key
         return self._path_cache[i]
 
@@ -675,6 +777,12 @@ class Multi_frame_renderer:
         old_time = self.time[id_frame]
         self.time[id_frame] = time.time()
 
+        # Per-card SV animation role (battle for the active Pokemon, wait/idle for
+        # benched). Computed once per frame and shared by the reload + draw loops.
+        _now = self.time[id_frame]
+        _active = active_card_indices(game_state)
+        roles = {i: self._card_role(i, i in _active, _now) for i in range(number_card)}
+
         for i in range(len(self.pokemon_models)):
             if self.num_frames_in_gif[i] != 1:
                 self.time_elapsed[i] = self.time_elapsed[i] + self.time[id_frame] - old_time
@@ -686,7 +794,7 @@ class Multi_frame_renderer:
         _all_sprite_paths = []
         _needs_reload = False
         for _ii in range(number_card):
-            for _f in self._cached_pokemon_path(game_state, _ii):
+            for _f in self._cached_pokemon_path(game_state, _ii, roles.get(_ii, SV_ROLE_WAIT)):
                 if _f != NO_POKEMON_PATH:
                     _all_sprite_paths.append(_f)
                     if not isinstance(self.pokemon_dict.get(_f), int):
@@ -706,7 +814,7 @@ class Multi_frame_renderer:
         draw_order.sort(key = lambda item: item[0])
 
         for _projected_row, i, projected, board_x in draw_order:
-            files = self._cached_pokemon_path(game_state, i)
+            files = self._cached_pokemon_path(game_state, i, roles.get(i, SV_ROLE_WAIT))
             pokemon_index = None
 
             # Sprites on the left half of the board are mirrored horizontally so the two

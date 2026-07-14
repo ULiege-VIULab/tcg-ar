@@ -6,7 +6,7 @@ Headless: a minimal Multi_frame_renderer is populated with fake models (no GIFs)
 import numpy as np
 
 from core.config import WIDTH, HEIGHT
-from inference.render_module import Multi_frame_renderer
+from inference.render_module import Multi_frame_renderer, Game_state
 
 
 def make_renderer(models):
@@ -15,19 +15,35 @@ def make_renderer(models):
         r.pokemon_dict[chr(ord("A") + k)] = k
         r.pokemon_original_models.append(m)
         r.pokemon_models.append(m)
+        r.pokemon_models_side.append(m)   # placeholder; filled by _build_side_model
         r.gif_duration.append(None)
         r.num_frames_in_gif.append(1)
         r.current_frame_num.append(np.zeros((1,), dtype=np.int32))
         r.time_elapsed.append(0)
+        r._build_side_model(k)            # pre-scale for the side/bottom-anchor views
     return r
 
 
 class FakeGS:
-    """cards: list of (path, x_col, y_row)."""
-    def __init__(self, cards): self.cards = cards
+    """cards: list of (path, x_col, y_row). Provides the current render_frame
+    contract: update_object(), a pokemon_list with distinct per-card cache keys,
+    and the active/bench queries used by the SV role logic."""
+    def __init__(self, cards):
+        self.cards = cards
+        # 19-field rows; a distinct Pokedex number per card so the renderer's
+        # path cache does not conflate two cards.
+        self.pokemon_list = []
+        for k in range(len(cards)):
+            row = [0] * 19
+            row[Game_state.NUMBER_POKEMON_INDEX] = 1
+            row[Game_state.POKEMON_POKEDEX_NUMBER_INDEX_1] = k + 1
+            self.pokemon_list.append(row)
+    def update_object(self): pass
     def get_number_of_card(self): return len(self.cards)
     def get_card_location(self, i): return (self.cards[i][1], self.cards[i][2])
-    def get_pokemon_path(self, i): return [self.cards[i][0]]
+    def get_pokemon_card_id(self, i): return f"card{i}"
+    def is_pokemon_card(self, i): return True
+    def get_pokemon_path(self, i, role="wait"): return [self.cards[i][0]]
 
 
 def solid(color, h=100, w=100):
