@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ptcg-ar"
-version = "1.1.0"
+version = "1.2.0"
 description = "Markerless augmented-reality pipeline for the Pokemon Trading Card Game"
 readme = "README.md"
 requires-python = ">=3.11"

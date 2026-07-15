@@ -156,7 +156,7 @@ def test_pipe_on_video(video_path):
             state = _recognize_frame(frame_read, detection_model, orientation_model, identification_model,
                                      anchors_dict, card_id_list, transform, device, method, color_correction=False)
             pokemon_game_state.update_state(state)
-            renderer.load_models(pokemon_game_state.get_pokemon_paths())
+            renderer.load_models(pokemon_game_state.get_all_sprite_paths(renderer.sv_enabled))
             ar_frame = renderer.render_frame(0, frame_read, pokemon_game_state, np.eye(3))
             new_time = time.time()
             nb_frame_produce = (nb_frame_produce + 1) % time_length

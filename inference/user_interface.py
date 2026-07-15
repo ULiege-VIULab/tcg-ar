@@ -2779,8 +2779,10 @@ class Zoom_slider(QtWidgets.QWidget):
             self.value = value
         self.value_text.setText(str(self.value))
         game_state = self.parent().parent().parent().parent().parent().game_state
+        renderer = self.parent().parent().parent().parent().parent().renderer
         #value is the zoom value in percentage so shold be divided by 100 upon calling the zoom function of the renderer
-        self.parent().parent().parent().parent().parent().renderer.zoom_models(game_state.get_pokemon_path(self.card_index), self.value / 100)
+        #zoom every role of the card so the slider affects the actually-displayed sprite (incl. SV roles)
+        renderer.zoom_models(game_state.get_card_sprite_paths(self.card_index, renderer.sv_enabled), self.value / 100)
         self.parent().parent().update_same_slider(self.parent().get_state(), self.value)
 
     def set_value(self, value):
@@ -2835,8 +2837,8 @@ class Form_menu(QtWidgets.QWidget):
     def update_state(self):
         game_state = self.parent().parent().parent().parent().parent().parent().parent().parent().game_state
         game_state.update_pokemon_form(self.card_index, self.pokemon_index, self.shiny_cb.isChecked(), self.female_cb.isChecked(), self.form.currentIndex() + 1, self.model.currentIndex() + 1)
-        pokemon_paths = game_state.get_pokemon_paths()
-        self.parent().parent().parent().parent().parent().parent().parent().parent().renderer.load_models(pokemon_paths)
+        renderer = self.parent().parent().parent().parent().parent().parent().parent().parent().renderer
+        renderer.load_models(game_state.get_all_sprite_paths(renderer.sv_enabled))
         self.parent().parent().parent().parent().zoom_slider.changeValue()
     
     def update(self):
@@ -3268,7 +3270,10 @@ class Show_camera_widget(QtWidgets.QWidget):
         if self.card_panel_view:
             self.card_panel.update_state()
 
-        pokemon_paths = self.game_state.get_pokemon_paths()
+        # Preload every sprite path that could be shown (all SV roles when SV is
+        # on) into the renderer's additive cache, so per-view render_frame calls
+        # and active<->idle role switches never re-decode a GIF.
+        pokemon_paths = self.game_state.get_all_sprite_paths(self.renderer.sv_enabled)
         self.renderer.load_models(pokemon_paths)
 
         for cam_num in range(self.detected_cam.get_nb_cam_available()):

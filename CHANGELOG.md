@@ -8,6 +8,17 @@ major = breaking changes. Each release on the
 [Releases page](https://github.com/ULiege-VIULab/tcg-ar/releases) mirrors its
 entry below.
 
+## [1.2.0] — 2026-07-14
+
+Render-pipeline performance.
+
+- **Fixed the slow Scarlet/Violet sprite rendering** (~1.8 fps → ~150 fps for the
+  same board). The renderer was re-decoding every card's GIF twice per frame; it
+  now keeps decoded sprites in an **additive LRU cache** (`MODEL_CACHE_MAX`) and
+  preloads every animation role once, so per-view renders and active↔idle
+  switches never re-decode. SV rendering is now as fast as the default sprites.
+- The Zoom slider now rescales the actually-displayed sprite when SV is enabled.
+
 ## [1.1.0] — 2026-07-14
 
 Higher-quality animated sprites.
@@ -51,5 +62,6 @@ First public release of the one-click Windows installer.
 - In-place upgrades preserve the card database, models and settings; uninstall
   optionally keeps the downloaded data.
 
+[1.2.0]: https://github.com/ULiege-VIULab/tcg-ar/releases/tag/v1.2.0
 [1.1.0]: https://github.com/ULiege-VIULab/tcg-ar/releases/tag/v1.1.0
 [1.0.0]: https://github.com/ULiege-VIULab/tcg-ar/releases/tag/v1.0.0

@@ -511,6 +511,31 @@ class Game_state:
 
         return pokemon_paths
 
+    def get_card_sprite_paths(self, card_index, sv_enabled):
+        """All sprite paths a single card could display: every SV animation role
+        when SV is on, else the single fallback path. De-duplicated."""
+        roles = (SV_ROLE_WAIT, SV_ROLE_BATTLE) + SV_ROLE_IDLES if sv_enabled else (SV_ROLE_WAIT,)
+        seen, out = set(), []
+        for role in roles:
+            for p in self.get_pokemon_path(card_index, role=role, sv_enabled=sv_enabled):
+                if p not in seen:
+                    seen.add(p)
+                    out.append(p)
+        return out
+
+    def get_all_sprite_paths(self, sv_enabled):
+        """Every sprite path that could be displayed this frame, for preloading
+        into the renderer's additive cache so per-view renders and active<->idle
+        role switches never trigger a GIF decode. De-duplicated, order-preserving."""
+        self.update_object()
+        seen, out = set(), []
+        for i in range(self.shared_list_variable[self.NUMBER_CARD_INDEX]):
+            for p in self.get_card_sprite_paths(i, sv_enabled):
+                if p not in seen:
+                    seen.add(p)
+                    out.append(p)
+        return out
+
     def get_pokemon_possible_form(self, pokemon_pokedex_id):
         if pokemon_pokedex_id:
             pokemon_pokedex_id -= 1
@@ -629,32 +654,43 @@ class Multi_frame_renderer:
         # Scarlet/Violet sprites are opt-in (broadcast-panel toggle). Off by
         # default -> the familiar, lighter gen1-8 animated / static sprites.
         self.sv_enabled: bool = False
+        # Additive model cache bookkeeping (LRU eviction past MODEL_CACHE_MAX).
+        self._last_used: dict = {}
+        self._load_counter: int = 0
     
-    def load_models(self, files_to_load):
-        #remove entry from pokemon_dict that is not in files_to_load
-        #remove models from pokemon_models that has been removed from the dict
-        #remove entry from files_to_load that is in pokemon_dict
-        dict_index = 0
-        for key in list(self.pokemon_dict.keys()):
-            try:
-                list_index = files_to_load.index(key)
-                files_to_load.pop(list_index)
-                self.pokemon_dict[key] = dict_index
-                dict_index += 1
-            except ValueError:
-                self.pokemon_dict.pop(key)
-                self.pokemon_original_models.pop(dict_index)
-                self.pokemon_models.pop(dict_index)
-                self.pokemon_models_side.pop(dict_index)
-                self.gif_duration.pop(dict_index)
-                self.num_frames_in_gif.pop(dict_index)
-                self.current_frame_num.pop(dict_index)
-                self.time_elapsed.pop(dict_index)
+    def _evict_lru(self):
+        """Keep the MODEL_CACHE_MAX most-recently-used models; rebuild the parallel
+        lists filtered to the kept paths (a clean reindex; runs rarely)."""
+        keep = set(sorted(self.pokemon_dict, key=lambda p: self._last_used.get(p, 0),
+                          reverse=True)[:MODEL_CACHE_MAX])
+        if len(keep) >= len(self.pokemon_dict):
+            return
+        order = [p for p in self.pokemon_dict if p in keep]
+        idx = {p: self.pokemon_dict[p] for p in order}
+        self.pokemon_original_models = [self.pokemon_original_models[idx[p]] for p in order]
+        self.pokemon_models = [self.pokemon_models[idx[p]] for p in order]
+        self.pokemon_models_side = [self.pokemon_models_side[idx[p]] for p in order]
+        self.gif_duration = [self.gif_duration[idx[p]] for p in order]
+        self.num_frames_in_gif = [self.num_frames_in_gif[idx[p]] for p in order]
+        self.current_frame_num = [self.current_frame_num[idx[p]] for p in order]
+        self.time_elapsed = [self.time_elapsed[idx[p]] for p in order]
+        self.pokemon_dict = {p: k for k, p in enumerate(order)}
+        for p in [q for q in self._last_used if q not in keep]:
+            del self._last_used[p]
 
-        #add entry to pokemon_dict that is in files_to_load
-        #add models to pokemon_models and meta data
+    def load_models(self, files_to_load):
+        # Additive LRU cache: decode each sprite once and keep it. The pipeline
+        # hands us DIFFERENT subsets every frame (the preload vs each render_frame,
+        # and the wait/battle/idle roles), so evicting "everything not in this
+        # list" -- the old behaviour -- re-decoded ~10 GIFs per frame (~540ms).
+        # We only ADD what is missing and drop the least-recently-used past the cap.
+        self._load_counter += 1
+        for f in files_to_load:
+            if f != NO_POKEMON_PATH:
+                self._last_used[f] = self._load_counter
+
         for file in files_to_load:
-            if type(self.pokemon_dict.get(file)) != int:
+            if file != NO_POKEMON_PATH and type(self.pokemon_dict.get(file)) != int:
                 index =  len(self.pokemon_dict)
                 self.pokemon_dict[file]= index
 
@@ -699,6 +735,9 @@ class Multi_frame_renderer:
                     self.zoom_models([file], MODEL_ZOOM_DEFAULT_PERCENT / 100)
                 else:
                     self._build_side_model(len(self.pokemon_dict) - 1)
+
+        if len(self.pokemon_dict) > MODEL_CACHE_MAX:
+            self._evict_lru()
 
     def _build_side_model(self, pokemon_index):
         """Pre-scale pokemon_models[pokemon_index] by SIDE_VIEW_ZOOM_RATIO for side views."""

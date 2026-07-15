@@ -116,6 +116,11 @@ SV_MAX_FRAMES = 40
 # keeps sizes uniform and the per-frame alpha compositing cheap (SV would
 # otherwise render ~3x taller / ~11x the pixel area). Stored files stay 256 px.
 SV_RENDER_STORE_HEIGHT = 90
+# Max number of distinct animated sprite models the renderer keeps decoded in
+# RAM at once (additive LRU cache). Covers a full board (14 Pokemon x 4 SV
+# roles + fallbacks) so on-board sprites are never evicted; least-recently-used
+# entries are dropped past this. ~a few hundred MB worst case.
+MODEL_CACHE_MAX = 80
 
 # --------------------------------------------------------------------------- #
 # User interface / broadcast overlay
